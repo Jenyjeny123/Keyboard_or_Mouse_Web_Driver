@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>V2 服务层演示</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { background: #0a0a0f; color: #e2e8f0; }
+        .glass-panel { background: rgba(15, 23, 42, 0.7); backdrop-filter: blur(12px); border: 1px solid rgba(6, 182, 212, 0.2); }
+        .btn { background: #0891b2; color: white; padding: 0.5rem 1rem; border-radius: 0.5rem; transition: all 0.2s; cursor: pointer; }
+        .btn:hover { background: #06b6d4; }
+        .btn:disabled { background: #475569; cursor: not-allowed; }
+        .log-line { font-family: monospace; font-size: 0.85rem; padding: 2px 0; }
+        .stat-card { background: rgba(6, 182, 212, 0.05); border: 1px solid rgba(6, 182, 212, 0.2); border-radius: 0.75rem; padding: 1rem; text-align: center; }
+        .stat-value { font-size: 2rem; font-weight: bold; color: #06b6d4; }
+        .stat-label { font-size: 0.85rem; color: #94a3b8; margin-top: 0.25rem; }
+    </style>
+</head>
+<body class="min-h-screen p-6">
+    <div class="max-w-6xl mx-auto">
+        <!-- Header -->
+        <header class="glass-panel p-6 mb-6">
+            <h1 class="text-3xl font-bold text-cyan-400 mb-2">🚀 V2 服务层演示</h1>
+            <p class="text-slate-400 text-sm">
+                DeviceService + LightingService + TestService - 基于 EventBus 的解耦架构
+            </p>
+        </header>
+
+        <!-- 服务状态 -->
+        <div class="glass-panel p-6 mb-6">
+            <h2 class="text-xl font-bold mb-4 text-cyan-300">📊 服务状态</h2>
+            <div class="grid grid-cols-4 gap-4">
+                <div class="stat-card">
+                    <div class="stat-value" id="deviceStatus">未连接</div>
+                    <div class="stat-label">设备状态</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="lightingStatus">关闭</div>
+                    <div class="stat-label">灯光状态</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="testStatus">空闲</div>
+                    <div class="stat-label">测试状态</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="eventCount">0</div>
+                    <div class="stat-label">事件计数</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 操作面板 -->
+        <div class="grid grid-cols-2 gap-6 mb-6">
+            <!-- 设备操作 -->
+            <div class="glass-panel p-6">
+                <h2 class="text-lg font-bold mb-4 text-cyan-300">🔌 设备操作 (DeviceService)</h2>
+                <div class="space-y-2">
+                    <button class="btn w-full" id="connectMockBtn">激活模拟模式</button>
+                    <button class="btn w-full" id="disconnectBtn" disabled>断开设备</button>
+                </div>
+                <div class="mt-4 text-sm text-slate-400">
+                    <p>模式: <span id="modeDisplay" class="text-cyan-400">-</span></p>
+                    <p>设备: <span id="deviceDisplay" class="text-cyan-400">-</span></p>
+                </div>
+            </div>
+
+            <!-- 灯光操作 -->
+            <div class="glass-panel p-6">
+                <h2 class="text-lg font-bold mb-4 text-cyan-300">💡 灯光操作 (LightingService)</h2>
+                <div class="space-y-2">
+                    <button class="btn w-full" id="lightingOnBtn" disabled>开启灯光</button>
+                    <button class="btn w-full" id="lightingOffBtn" disabled>关闭灯光</button>
+                    <button class="btn w-full" id="changeColorBtn" disabled>切换颜色</button>
+                </div>
+                <div class="mt-4 text-sm text-slate-400">
+                    <p>主色: <span id="colorDisplay" class="text-cyan-400">-</span></p>
+                    <p>模式: <span id="modeLightDisplay" class="text-cyan-400">-</span></p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 数据测试 -->
+        <div class="glass-panel p-6 mb-6">
+            <h2 class="text-lg font-bold mb-4 text-cyan-300">🧪 数据测试 (TestService)</h2>
+            <div class="grid grid-cols-2 gap-4 mb-4">
+                <div>
+                    <label class="text-sm text-slate-400">发送次数</label>
+                    <input type="number" id="testCount" value="50" min="1" max="1000" class="w-full bg-slate-800 border border-slate-700 rounded p-2 mt-1">
+                </div>
+                <div>
+                    <label class="text-sm text-slate-400">间隔 (ms, 最低5)</label>
+                    <input type="number" id="testInterval" value="5" min="5" max="1000" class="w-full bg-slate-800 border border-slate-700 rounded p-2 mt-1">
+                </div>
+            </div>
+            <div class="flex gap-2">
+                <button class="btn flex-1" id="startTestBtn" disabled>▶ 开始测试</button>
+                <button class="btn flex-1" id="stopTestBtn" disabled>⏸ 停止测试</button>
+                <button class="btn flex-1" id="downloadReportBtn" disabled>📥 下载报告</button>
+            </div>
+
+            <!-- 测试统计 -->
+            <div class="grid grid-cols-5 gap-3 mt-4">
+                <div class="stat-card">
+                    <div class="stat-value" id="statSent">0</div>
+                    <div class="stat-label">已发送</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="statReceived">0</div>
+                    <div class="stat-label">已接收</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value text-emerald-400" id="statSuccess">0</div>
+                    <div class="stat-label">成功</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value text-red-400" id="statFailed">0</div>
+                    <div class="stat-label">失败</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value text-yellow-400" id="statRate">0%</div>
+                    <div class="stat-label">成功率</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 事件日志 -->
+        <div class="glass-panel p-6">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-xl font-bold text-cyan-300">📝 事件日志 (EventBus)</h2>
+                <button class="btn" id="clearLogBtn">清空</button>
+            </div>
+            <div id="logContainer" class="bg-slate-900/50 rounded-lg p-4 max-h-96 overflow-y-auto"></div>
+        </div>
+    </div>
+
+    <script type="module">
+        // 导入服务
+        import { bus } from './src/core/EventBus.js';
+        import { logger } from './src/core/Logger.js';
+        import { DeviceService, DeviceType, DeviceStatus } from './src/services/DeviceService.js';
+        import { LightingService, LightMode } from './src/services/LightingService.js';
+        import { TestService, TestDataType, TestStatus } from './src/services/TestService.js';
+        import { TEST, PROTOCOL } from './src/core/Config.js';
+        // 全局暴露
+        window.V2 = { bus, logger, DeviceService, LightingService, TestService };
+
+        // ============================================================
+        // 初始化服务
+        // ============================================================
+        const deviceService = new DeviceService();
+        const lightingService = new LightingService(null); // 稍后注入 protocol
+        const testService = new TestService(null);
+
+        let eventCount = 0;
+
+        // ============================================================
+        // UI 日志
+        // ============================================================
+        const logContainer = document.getElementById('logContainer');
+
+        function addLog(msg, color = 'slate-300') {
+            const time = new Date().toLocaleTimeString();
+            const line = document.createElement('div');
+            line.className = `log-line text-${color}`;
+            line.textContent = `[${time}] ${msg}`;
+            logContainer.appendChild(line);
+            logContainer.scrollTop = logContainer.scrollHeight;
+
+            // 限制日志行数
+            while (logContainer.children.length > 200) {
+                logContainer.removeChild(logContainer.firstChild);
+            }
+        }
+
+        // 监听 Logger 事件
+        bus.on('log:new', (entry) => {
+            addLog(`[${entry.level}] ${entry.message}`, entry.color || 'slate-300');
+        });
+
+        // 监听所有关键事件
+        const watchEvents = [
+            'device:connected', 'device:disconnected', 'device:status-changed',
+            'lighting:enabled-changed', 'lighting:mode-changed', 'lighting:color-changed',
+            'lighting:applying', 'lighting:applied', 'lighting:error',
+            'test:started', 'test:progress', 'test:finished',
+            'test:item-success', 'test:item-failed', 'test:config-updated', 'test:stats-reset',
+        ];
+
+        watchEvents.forEach(event => {
+            bus.on(event, (data) => {
+                eventCount++;
+                document.getElementById('eventCount').textContent = eventCount;
+                addLog(`📢 ${event}`, 'cyan-400');
+            });
+        });
+
+        // ============================================================
+        // 设备状态
+        // ============================================================
+        function updateDeviceStatusUI() {
+            const statusMap = {
+                [DeviceStatus.DISCONNECTED]: '未连接',
+                [DeviceStatus.SEARCHING]: '搜索中',
+                [DeviceStatus.CONNECTING]: '连接中',
+                [DeviceStatus.CONNECTED]: '已连接',
+                [DeviceStatus.ERROR]: '错误',
+            };
+            document.getElementById('deviceStatus').textContent = statusMap[deviceService.getStatus()] || '未知';
+
+            const isConnected = deviceService.isConnected();
+            document.getElementById('connectMockBtn').disabled = isConnected;
+            document.getElementById('disconnectBtn').disabled = !isConnected;
+            document.getElementById('lightingOnBtn').disabled = !isConnected;
+            document.getElementById('lightingOffBtn').disabled = !isConnected;
+            document.getElementById('changeColorBtn').disabled = !isConnected;
+            document.getElementById('startTestBtn').disabled = !isConnected || testService.status === TestStatus.RUNNING;
+
+            if (isConnected) {
+                const info = deviceService.getDeviceInfo();
+                document.getElementById('modeDisplay').textContent = deviceService.isMockMode() ? '模拟模式' : '实机模式';
+                document.getElementById('deviceDisplay').textContent = info.productName;
+            } else {
+                document.getElementById('modeDisplay').textContent = '-';
+                document.getElementById('deviceDisplay').textContent = '-';
+            }
+        }
+
+        bus.on('device:status-changed', updateDeviceStatusUI);
+        bus.on('device:connected', () => {
+            // 注入 protocol 到服务
+            lightingService.protocol = deviceService.getProtocol();
+            testService.protocol = deviceService.getProtocol();
+            updateDeviceStatusUI();
+        });
+        bus.on('device:disconnected', updateDeviceStatusUI);
+
+        // ============================================================
+        // 灯光 UI
+        // ============================================================
+        bus.on('lighting:enabled-changed', (data) => {
+            document.getElementById('lightingStatus').textContent = data.enabled ? '开启' : '关闭';
+        });
+        bus.on('lighting:mode-changed', (data) => {
+            document.getElementById('modeLightDisplay').textContent = data.mode;
+        });
+        bus.on('lighting:color-changed', (data) => {
+            const hex = '#' + [data.color.r, data.color.g, data.color.b]
+                .map(v => v.toString(16).padStart(2, '0')).join('').toUpperCase();
+            document.getElementById('colorDisplay').textContent = hex;
+        });
+
+        // ============================================================
+        // 测试 UI
+        // ============================================================
+        bus.on('test:progress', (data) => {
+            const stats = testService.getStats();
+            document.getElementById('statSent').textContent = stats.totalSent;
+            document.getElementById('statReceived').textContent = stats.totalReceived;
+            document.getElementById('statSuccess').textContent = stats.success;
+            document.getElementById('statFailed').textContent = stats.failed;
+            document.getElementById('statRate').textContent = stats.successRate + '%';
+        });
+
+        bus.on('test:finished', () => {
+            document.getElementById('testStatus').textContent = '完成';
+            document.getElementById('startTestBtn').disabled = false;
+            document.getElementById('stopTestBtn').disabled = true;
+            document.getElementById('downloadReportBtn').disabled = false;
+        });
+
+        bus.on('test:started', () => {
+            document.getElementById('testStatus').textContent = '运行中';
+            document.getElementById('startTestBtn').disabled = true;
+            document.getElementById('stopTestBtn').disabled = false;
+            document.getElementById('downloadReportBtn').disabled = true;
+        });
+
+        // ============================================================
+        // 按钮事件
+        // ============================================================
+        document.getElementById('connectMockBtn').onclick = () => {
+            deviceService.activateMockMode();
+        };
+
+        document.getElementById('disconnectBtn').onclick = async () => {
+            await deviceService.disconnect();
+        };
+
+        document.getElementById('lightingOnBtn').onclick = async () => {
+            await lightingService.setEnabled(true);
+        };
+
+        document.getElementById('lightingOffBtn').onclick = async () => {
+            await lightingService.setEnabled(false);
+        };
+
+        document.getElementById('changeColorBtn').onclick = async () => {
+            const colors = ['#FF0000', '#00FF00', '#0000FF', '#FFFF00', '#FF00FF', '#00FFFF'];
+            const random = colors[Math.floor(Math.random() * colors.length)];
+            await lightingService.setMainColor(random);
+        };
+
+        document.getElementById('startTestBtn').onclick = async () => {
+            const count = parseInt(document.getElementById('testCount').value) || 50;
+            const interval = parseInt(document.getElementById('testInterval').value) || 5;
+            await testService.startTest({ sendCount: count, interval });
+        };
+
+        document.getElementById('stopTestBtn').onclick = () => {
+            testService.stopTest();
+        };
+
+        document.getElementById('downloadReportBtn').onclick = () => {
+            testService.downloadReport();
+        };
+
+        document.getElementById('clearLogBtn').onclick = () => {
+            logContainer.innerHTML = '';
+            eventCount = 0;
+            document.getElementById('eventCount').textContent = '0';
+        };
+
+        // 初始化
+        updateDeviceStatusUI();
+        logger.info('V2 服务层演示页面已加载');
+        addLog('页面加载完成, 点击 "激活模拟模式" 开始', 'emerald-400');
+    </script>
+</body>
+</html>

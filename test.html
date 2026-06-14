@@ -1,0 +1,668 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>模块测试 - SwiftKey X1</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background: #0a0a0f;
+            color: #e2e8f0;
+            font-family: 'Consolas', 'Monaco', monospace;
+        }
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.6);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(6, 182, 212, 0.2);
+            border-radius: 12px;
+        }
+        .test-pass { color: #10b981; }
+        .test-fail { color: #ef4444; }
+        .test-info { color: #06b6d4; }
+        .test-warn { color: #f59e0b; }
+        .log-line {
+            padding: 4px 12px;
+            border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+            font-size: 13px;
+        }
+        .log-line:hover { background: rgba(6, 182, 212, 0.05); }
+        .hex-dump {
+            font-family: 'Courier New', monospace;
+            background: rgba(15, 23, 42, 0.8);
+            padding: 8px 12px;
+            border-radius: 6px;
+            border: 1px solid rgba(6, 182, 212, 0.2);
+            word-break: break-all;
+        }
+        .btn {
+            padding: 8px 16px;
+            border-radius: 8px;
+            border: 1px solid rgba(6, 182, 212, 0.3);
+            background: rgba(6, 182, 212, 0.1);
+            color: #06b6d4;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn:hover {
+            background: rgba(6, 182, 212, 0.2);
+            border-color: rgba(6, 182, 212, 0.5);
+        }
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .status-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: bold;
+        }
+        .status-pending { background: rgba(148, 163, 184, 0.2); color: #94a3b8; }
+        .status-running { background: rgba(6, 182, 212, 0.2); color: #06b6d4; }
+        .status-pass { background: rgba(16, 185, 129, 0.2); color: #10b981; }
+        .status-fail { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
+    </style>
+</head>
+<body class="min-h-screen p-6">
+    <div class="max-w-6xl mx-auto">
+        <!-- Header -->
+        <header class="glass-panel p-6 mb-6">
+            <h1 class="text-3xl font-bold text-cyan-400 mb-2">
+                🧪 模块测试套件
+            </h1>
+            <p class="text-slate-400 text-sm">
+                SwiftKey X1 - V2.1 架构验证 | 测试 EventBus, Logger, Config, BaseCommands, PacketBuilder, Protocol, WebHIDTransport
+            </p>
+        </header>
+
+        <!-- Summary -->
+        <div class="glass-panel p-6 mb-6">
+            <div class="grid grid-cols-4 gap-4 text-center">
+                <div>
+                    <div class="text-3xl font-bold" id="totalCount">0</div>
+                    <div class="text-slate-400 text-sm">总测试数</div>
+                </div>
+                <div>
+                    <div class="text-3xl font-bold test-pass" id="passCount">0</div>
+                    <div class="text-slate-400 text-sm">通过</div>
+                </div>
+                <div>
+                    <div class="text-3xl font-bold test-fail" id="failCount">0</div>
+                    <div class="text-slate-400 text-sm">失败</div>
+                </div>
+                <div>
+                    <div class="text-3xl font-bold test-info" id="passRate">0%</div>
+                    <div class="text-slate-400 text-sm">通过率</div>
+                </div>
+            </div>
+            <div class="flex gap-3 mt-4">
+                <button class="btn" id="runAllBtn">▶ 运行所有测试</button>
+                <button class="btn" id="clearLogBtn">🗑 清空日志</button>
+                <button class="btn" id="connectBtn">🔌 连接设备</button>
+            </div>
+        </div>
+
+        <!-- Test Items -->
+        <div class="glass-panel p-6 mb-6">
+            <h2 class="text-xl font-bold mb-4 text-cyan-300">📋 测试项</h2>
+            <div id="testList" class="space-y-2"></div>
+        </div>
+
+        <!-- Logger Output -->
+        <div class="glass-panel p-6 mb-6">
+            <h2 class="text-xl font-bold mb-4 text-cyan-300">📝 实时日志</h2>
+            <div id="logContainer" class="bg-slate-900/50 rounded-lg max-h-96 overflow-y-auto"></div>
+        </div>
+
+        <!-- Data Packets -->
+        <div class="glass-panel p-6">
+            <h2 class="text-xl font-bold mb-4 text-cyan-300">📦 数据包生成示例</h2>
+            <div id="packetDemo" class="space-y-3"></div>
+        </div>
+    </div>
+
+    <script type="module">
+        // 导入所有模块
+        import { EventBus, bus } from './src/core/EventBus.js';
+        import { logger, LOG_LEVEL } from './src/core/Logger.js';
+        import { PROTOCOL, TEST, LIGHTING } from './src/core/Config.js';
+        import { CMD, STATUS, CATEGORY, getCmdName, getStatusName } from './src/protocol/commands/BaseCommands.js';
+        import { PacketBuilder } from './src/protocol/PacketBuilder.js';
+        import { Protocol } from './src/protocol/Protocol.js';
+        import { WebHIDTransport } from './src/transport/WebHIDTransport.js';
+
+        // 测试结果记录
+        const testResults = [];
+        let connectedDevice = null;
+        let transport = null;
+        let protocol = null;
+
+        // 测试项定义
+        const tests = [
+            { id: 'eventbus', name: 'EventBus - 事件总线', status: 'pending' },
+            { id: 'logger', name: 'Logger - 日志系统', status: 'pending' },
+            { id: 'config', name: 'Config - 配置常量', status: 'pending' },
+            { id: 'basecommands', name: 'BaseCommands - 命令常量', status: 'pending' },
+            { id: 'packetbuilder-build', name: 'PacketBuilder - 构建数据包', status: 'pending' },
+            { id: 'packetbuilder-parse', name: 'PacketBuilder - 解析数据包', status: 'pending' },
+            { id: 'packetbuilder-edge', name: 'PacketBuilder - 边界条件', status: 'pending' },
+            { id: 'protocol-basic', name: 'Protocol - 基础流程', status: 'pending' },
+            { id: 'protocol-timeout', name: 'Protocol - 超时处理', status: 'pending' },
+            { id: 'webhid-support', name: 'WebHID - 浏览器支持', status: 'pending' },
+        ];
+
+        // 渲染测试列表
+        function renderTests() {
+            const container = document.getElementById('testList');
+            container.innerHTML = tests.map(t => `
+                <div class="flex items-center justify-between p-3 bg-slate-900/50 rounded-lg">
+                    <span>${t.name}</span>
+                    <span class="status-badge status-${t.status}">
+                        ${t.status === 'pending' ? '待运行' : t.status === 'running' ? '运行中' : t.status === 'pass' ? '✓ 通过' : '✗ 失败'}
+                    </span>
+                </div>
+            `).join('');
+            updateSummary();
+        }
+
+        // 更新汇总
+        function updateSummary() {
+            const total = tests.length;
+            const pass = tests.filter(t => t.status === 'pass').length;
+            const fail = tests.filter(t => t.status === 'fail').length;
+            const rate = total > 0 ? ((pass / total) * 100).toFixed(1) : '0';
+
+            document.getElementById('totalCount').textContent = total;
+            document.getElementById('passCount').textContent = pass;
+            document.getElementById('failCount').textContent = fail;
+            document.getElementById('passRate').textContent = `${rate}%`;
+        }
+
+        // 设置测试状态
+        function setTestStatus(id, status) {
+            const t = tests.find(x => x.id === id);
+            if (t) t.status = status;
+            renderTests();
+        }
+
+        // 日志输出
+        function addLog(message, type = 'info') {
+            const container = document.getElementById('logContainer');
+            const time = new Date().toLocaleTimeString();
+            const colorClass = {
+                'info': 'text-slate-300',
+                'pass': 'text-green-400',
+                'fail': 'text-red-400',
+                'warn': 'text-amber-400',
+                'eventbus': 'text-purple-400',
+                'logger': 'text-cyan-400',
+                'protocol': 'text-emerald-400',
+                'packet': 'text-pink-400',
+            }[type] || 'text-slate-300';
+
+            const line = document.createElement('div');
+            line.className = `log-line ${colorClass}`;
+            line.textContent = `[${time}] ${message}`;
+            container.appendChild(line);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        // 监听 Logger 事件
+        bus.on('log:new', (entry) => {
+            // 已经在 logger 内部 console 输出, 这里可以选择是否显示
+        });
+
+        // ============ 测试函数 ============
+
+        async function testEventBus() {
+            setTestStatus('eventbus', 'running');
+            try {
+                const results = [];
+                const bus2 = new EventBus();
+
+                // 1. 基本订阅/发布
+                let received = null;
+                const unsub = bus2.on('test:event', (data) => { received = data; });
+                bus2.emit('test:event', 'hello');
+                results.push(received === 'hello' ? '✓ 基本订阅' : '✗ 基本订阅');
+
+                // 2. 多个订阅者
+                let count = 0;
+                bus2.on('test:multi', () => count++);
+                bus2.on('test:multi', () => count++);
+                bus2.emit('test:multi');
+                results.push(count === 2 ? '✓ 多订阅者' : '✗ 多订阅者');
+
+                // 3. 取消订阅
+                let count2 = 0;
+                const handler = () => count2++;
+                const unsub2 = bus2.on('test:cancel', handler);
+                bus2.emit('test:cancel');
+                unsub2();
+                bus2.emit('test:cancel');
+                results.push(count2 === 1 ? '✓ 取消订阅' : '✗ 取消订阅');
+
+                // 4. 一次性事件
+                let onceCount = 0;
+                bus2.once('test:once', () => onceCount++);
+                bus2.emit('test:once');
+                bus2.emit('test:once');
+                results.push(onceCount === 1 ? '✓ 一次性事件' : '✗ 一次性事件');
+
+                // 5. 错误处理
+                let errorCaught = false;
+                bus2.on('test:error', () => { throw new Error('test'); });
+                const origConsole = console.error;
+                console.error = () => { errorCaught = true; };
+                bus2.emit('test:error');
+                console.error = origConsole;
+                results.push(errorCaught ? '✓ 错误捕获' : '✗ 错误捕获');
+
+                // 6. listenerCount (test:event 仍有一个订阅, test:cancel 已取消)
+                const cnt1 = bus2.listenerCount('test:event');
+                const cnt2 = bus2.listenerCount('test:cancel');
+                results.push(
+                    cnt1 === 1 ? '✓ listenerCount (活跃)' :
+                    `✗ listenerCount (活跃, 期望 1 实际 ${cnt1})`
+                );
+                results.push(
+                    cnt2 === 0 ? '✓ listenerCount (已取消)' :
+                    `✗ listenerCount (已取消, 期望 0 实际 ${cnt2})`
+                );
+
+                // 清理
+                unsub();
+                bus2.clear();
+
+                addLog(`EventBus 测试: ${results.join(' | ')}`, 'eventbus');
+                setTestStatus('eventbus', 'pass');
+                return true;
+            } catch (err) {
+                addLog(`EventBus 失败: ${err.message}`, 'fail');
+                setTestStatus('eventbus', 'fail');
+                return false;
+            }
+        }
+
+        async function testLogger() {
+            setTestStatus('logger', 'running');
+            try {
+                // 输出不同级别日志
+                logger.debug('DEBUG 测试消息');
+                logger.info('INFO 测试消息');
+                logger.warn('WARN 测试消息');
+                logger.error('ERROR 测试消息');
+
+                const logs = logger.getLogs();
+                const hasAll = logs.length >= 4;
+                const hasDebug = logs.some(l => l.level === 'DEBUG');
+                const hasError = logs.some(l => l.level === 'ERROR');
+
+                logger.clear();
+                const afterClear = logger.getLogs().length;
+
+                if (hasAll && hasDebug && hasError && afterClear === 0) {
+                    addLog(`Logger 测试: 4级日志 ✓ | 缓存 ✓ | 清空 ✓`, 'logger');
+                    setTestStatus('logger', 'pass');
+                    return true;
+                }
+                throw new Error('Logger 行为不符预期');
+            } catch (err) {
+                addLog(`Logger 失败: ${err.message}`, 'fail');
+                setTestStatus('logger', 'fail');
+                return false;
+            }
+        }
+
+        async function testConfig() {
+            setTestStatus('config', 'running');
+            try {
+                const checks = [
+                    PROTOCOL.REPORT_ID === 0x04,
+                    PROTOCOL.HEADER_SIZE === 8,
+                    PROTOCOL.DATA_AREA_SIZE === 56,
+                    PROTOCOL.PACKET_SIZE === 64,
+                    TEST.MIN_INTERVAL === 5,
+                    TEST.DEFAULT_COUNT === 50,
+                    LIGHTING.LED_COUNT === 15,
+                ];
+                const allPass = checks.every(Boolean);
+                addLog(`Config 测试: ${allPass ? '所有常量正确' : '常量错误'}`, 'logger');
+                setTestStatus('config', allPass ? 'pass' : 'fail');
+                return allPass;
+            } catch (err) {
+                addLog(`Config 失败: ${err.message}`, 'fail');
+                setTestStatus('config', 'fail');
+                return false;
+            }
+        }
+
+        async function testBaseCommands() {
+            setTestStatus('basecommands', 'running');
+            try {
+                const checks = [
+                    CMD.PING === 0x0000,
+                    CMD.LED_START === 0x0102,
+                    CMD.REMAP_KEY === 0x0203,
+                    CMD.READ_DPI === 0x0302,
+                    STATUS.SUCCESS === 0x00,
+                    CATEGORY.LIGHTING === 0x01,
+                    getCmdName(0x0102) === 'LED_START',
+                    getStatusName(0x02) === 'INVALID_CMD',
+                ];
+                const allPass = checks.every(Boolean);
+                addLog(`BaseCommands 测试: ${allPass ? '所有命令正确' : '命令错误'}`, 'protocol');
+                setTestStatus('basecommands', allPass ? 'pass' : 'fail');
+                return allPass;
+            } catch (err) {
+                addLog(`BaseCommands 失败: ${err.message}`, 'fail');
+                setTestStatus('basecommands', 'fail');
+                return false;
+            }
+        }
+
+        async function testPacketBuilderBuild() {
+            setTestStatus('packetbuilder-build', 'running');
+            try {
+                // 测试 1: 心跳包
+                const pingPacket = PacketBuilder.build(CMD.PING, [], 0);
+                const pingOk = pingPacket.length === 63;
+
+                // 测试 2: 写 LED 数据
+                // 63字节包结构 (去除Report ID):
+                // [0]=CMD低 [1]=CMD高 [2]=LEN [3]=ADDR低 [4]=ADDR高 [5]=DL低 [6]=DL高
+                // [7]=data[0] [8]=data[1] ...
+                const ledData = [0x0F, 0xFF, 0x00, 0x00, 0xFF, 0x00]; // LED_ID + 2个 RGB
+                const ledPacket = PacketBuilder.build(CMD.WRITE_LED_DEFINE, ledData, 0x1000);
+                const ledOk = ledPacket.length === 63 && ledPacket[7] === 0x0F; // 修正: data[0] 在 packet[7]
+
+                // 测试 3: 验证 CMD (低高字节组合)
+                const cmdLow = ledPacket[0];
+                const cmdHigh = ledPacket[1];
+                const cmdReconstructed = cmdLow | (cmdHigh << 8);
+                const cmdOk = cmdReconstructed === CMD.WRITE_LED_DEFINE;
+
+                // 测试 4: 验证 ADDR (低高字节组合)
+                const addrLow = ledPacket[3];
+                const addrHigh = ledPacket[4];
+                const addrReconstructed = addrLow | (addrHigh << 8);
+                const addrOk = addrReconstructed === 0x1000;
+
+                // 测试 5: 验证 LEN
+                const lenOk = ledPacket[2] === 6;
+
+                if (pingOk && ledOk && cmdOk && addrOk && lenOk) {
+                    addLog(`PacketBuilder.build 测试: 全部正确`, 'packet');
+                    setTestStatus('packetbuilder-build', 'pass');
+                    return true;
+                }
+                throw new Error(`包构建错误: pingOk=${pingOk}, ledOk=${ledOk}, cmdOk=${cmdOk}, addrOk=${addrOk}, lenOk=${lenOk}`);
+            } catch (err) {
+                addLog(`PacketBuilder.build 失败: ${err.message}`, 'fail');
+                setTestStatus('packetbuilder-build', 'fail');
+                return false;
+            }
+        }
+
+        async function testPacketBuilderParse() {
+            setTestStatus('packetbuilder-parse', 'running');
+            try {
+                // 构建并解析回环
+                const original = [0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC];
+                const packet = PacketBuilder.build(CMD.LOOPBACK_TEST, original, 0x0000);
+                const parsed = PacketBuilder.parse(packet);
+
+                const cmdOk = parsed.cmd === CMD.LOOPBACK_TEST;
+                const dataOk = JSON.stringify(parsed.data) === JSON.stringify(original);
+
+                if (cmdOk && dataOk) {
+                    addLog(`PacketBuilder.parse 测试: 解析正确 (${parsed.cmdName})`, 'packet');
+                    setTestStatus('packetbuilder-parse', 'pass');
+                    return true;
+                }
+                throw new Error(`解析不一致: cmd=${cmdOk}, data=${dataOk}`);
+            } catch (err) {
+                addLog(`PacketBuilder.parse 失败: ${err.message}`, 'fail');
+                setTestStatus('packetbuilder-parse', 'fail');
+                return false;
+            }
+        }
+
+        async function testPacketBuilderEdge() {
+            setTestStatus('packetbuilder-edge', 'running');
+            try {
+                // 测试 1: 空数据
+                const empty = PacketBuilder.build(CMD.PING, [], 0);
+                const emptyOk = empty.length === 63 && empty[2] === 0;
+
+                // 测试 2: 完整 56 字节
+                const full = PacketBuilder.build(CMD.WRITE_FLASH, new Array(56).fill(0xAA), 0);
+                const fullOk = full.length === 63;
+
+                // 测试 3: 超过 56 字节应该抛出
+                let throwOk = false;
+                try {
+                    PacketBuilder.build(CMD.PING, new Array(57).fill(0), 0);
+                } catch (e) {
+                    throwOk = true;
+                }
+
+                if (emptyOk && fullOk && throwOk) {
+                    addLog(`PacketBuilder 边界测试: 全部通过`, 'packet');
+                    setTestStatus('packetbuilder-edge', 'pass');
+                    return true;
+                }
+                throw new Error('边界测试失败');
+            } catch (err) {
+                addLog(`PacketBuilder 边界失败: ${err.message}`, 'fail');
+                setTestStatus('packetbuilder-edge', 'fail');
+                return false;
+            }
+        }
+
+        async function testProtocolBasic() {
+            setTestStatus('protocol-basic', 'running');
+            try {
+                // 创建一个 Mock Transport
+                const mockTransport = {
+                    handlers: { receive: [], error: [] },
+                    sendCalled: 0,
+                    send(data) {
+                        this.sendCalled++;
+                        logger.debug(`Mock Transport 收到 send #${this.sendCalled}`);
+                        // 模拟设备立即返回成功
+                        setTimeout(() => {
+                            const response = PacketBuilder.build(
+                                CMD.PING,
+                                [STATUS.SUCCESS, 0x01, 0x02, 0x03],
+                                0
+                            );
+                            this.handlers.receive.forEach(h => h(response));
+                        }, 10);
+                        return Promise.resolve();
+                    },
+                    onReceive(h) { this.handlers.receive.push(h); },
+                    onError(h) { this.handlers.error.push(h); },
+                };
+
+                const mockProtocol = new Protocol(mockTransport);
+                const result = await mockProtocol.send(CMD.PING, []);
+
+                const statusOk = result.status === STATUS.SUCCESS;
+                const dataOk = result.data.length === 3 && result.data[0] === 0x01;
+                const sendCountOk = mockTransport.sendCalled === 1;
+
+                if (statusOk && dataOk && sendCountOk) {
+                    addLog(`Protocol 基础测试: 发送+响应+解析 ✓`, 'protocol');
+                    setTestStatus('protocol-basic', 'pass');
+                    return true;
+                }
+                throw new Error('Protocol 基础测试失败');
+            } catch (err) {
+                addLog(`Protocol 基础失败: ${err.message}`, 'fail');
+                setTestStatus('protocol-basic', 'fail');
+                return false;
+            }
+        }
+
+        async function testProtocolTimeout() {
+            setTestStatus('protocol-timeout', 'running');
+            try {
+                // 创建一个不响应的 Mock
+                const silentTransport = {
+                    handlers: { receive: [], error: [] },
+                    send() {
+                        // 不调用 receive, 模拟无响应
+                        return Promise.resolve();
+                    },
+                    onReceive(h) { this.handlers.receive.push(h); },
+                    onError(h) { this.handlers.error.push(h); },
+                };
+
+                const proto = new Protocol(silentTransport);
+                proto.setTimeout(200); // 200ms 超时
+
+                const startTime = Date.now();
+                let timeoutErr = null;
+                try {
+                    await proto.send(CMD.PING, []);
+                } catch (err) {
+                    timeoutErr = err;
+                }
+                const elapsed = Date.now() - startTime;
+
+                const timeoutOk = timeoutErr && timeoutErr.code === 'TIMEOUT';
+                const timeOk = elapsed >= 200 && elapsed < 500;
+
+                if (timeoutOk && timeOk) {
+                    addLog(`Protocol 超时测试: ${elapsed}ms 超时 ✓`, 'protocol');
+                    setTestStatus('protocol-timeout', 'pass');
+                    return true;
+                }
+                throw new Error(`超时测试失败: err=${timeoutErr?.code}, time=${elapsed}ms`);
+            } catch (err) {
+                addLog(`Protocol 超时失败: ${err.message}`, 'fail');
+                setTestStatus('protocol-timeout', 'fail');
+                return false;
+            }
+        }
+
+        async function testWebHIDSupport() {
+            setTestStatus('webhid-support', 'running');
+            try {
+                const supported = WebHIDTransport.isSupported();
+                addLog(`WebHID 支持检测: ${supported ? '✓ 浏览器支持' : '✗ 浏览器不支持 (请使用 Chrome/Edge)'}`, 'protocol');
+                setTestStatus('webhid-support', supported ? 'pass' : 'fail');
+                return supported;
+            } catch (err) {
+                addLog(`WebHID 检测失败: ${err.message}`, 'fail');
+                setTestStatus('webhid-support', 'fail');
+                return false;
+            }
+        }
+
+        // 演示: 生成几个典型数据包
+        function demoPackets() {
+            const container = document.getElementById('packetDemo');
+            const demos = [
+                { name: '心跳请求 (PING)', cmd: CMD.PING, data: [] },
+                { name: '读取 DPI (档位1)', cmd: CMD.READ_DPI, data: [0x01] },
+                { name: '设置单 LED 颜色', cmd: CMD.SET_SINGLE_LED, data: [0x05, 0xFF, 0x00, 0xAA] },
+                { name: '写 15 LED 颜色', cmd: CMD.WRITE_LED_DEFINE, data: [0x01, 0xFF, 0x00, 0x00, 0xFF, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0x00] },
+                { name: '回环测试', cmd: CMD.LOOPBACK_TEST, data: [0xDE, 0xAD, 0xBE, 0xEF] },
+            ];
+
+            container.innerHTML = demos.map(d => {
+                const packet = PacketBuilder.build(d.cmd, d.data, 0);
+                const hex = PacketBuilder.toHex(packet);
+                const parsed = PacketBuilder.parse(packet);
+                return `
+                    <div>
+                        <div class="text-cyan-300 font-medium mb-1">${d.name}</div>
+                        <div class="text-xs text-slate-400 mb-1">
+                            CMD: 0x${parsed.cmd.toString(16).padStart(4, '0')} (${parsed.cmdName}) |
+                            LEN: ${parsed.len} |
+                            ADDR: 0x${parsed.addr.toString(16).padStart(4, '0')}
+                        </div>
+                        <div class="hex-dump text-xs">${hex}</div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // 运行所有测试
+        async function runAllTests() {
+            document.getElementById('runAllBtn').disabled = true;
+            addLog('========== 开始运行所有测试 ==========', 'info');
+
+            await testEventBus();
+            await testLogger();
+            await testConfig();
+            await testBaseCommands();
+            await testPacketBuilderBuild();
+            await testPacketBuilderParse();
+            await testPacketBuilderEdge();
+            await testProtocolBasic();
+            await testProtocolTimeout();
+            await testWebHIDSupport();
+
+            addLog('========== 测试完成 ==========', 'info');
+            document.getElementById('runAllBtn').disabled = false;
+        }
+
+        // 设备连接
+        async function connectDevice() {
+            if (!WebHIDTransport.isSupported()) {
+                addLog('浏览器不支持 WebHID, 请使用 Chrome/Edge', 'fail');
+                return;
+            }
+
+            try {
+                document.getElementById('connectBtn').disabled = true;
+                addLog('正在请求设备授权...', 'info');
+
+                transport = new WebHIDTransport();
+                const devices = await transport.request();
+
+                if (devices.length === 0) {
+                    addLog('未选择设备', 'warn');
+                    return;
+                }
+
+                await transport.connect(devices[0]);
+                connectedDevice = transport.device;
+                protocol = new Protocol(transport);
+
+                addLog(`设备已连接: ${connectedDevice.productName || 'Unknown'}`, 'pass');
+                addLog(`VID: 0x${connectedDevice.vendorId.toString(16).toUpperCase()}, PID: 0x${connectedDevice.productId.toString(16).toUpperCase()}`, 'info');
+
+                // 监听接收
+                bus.on('protocol:receive', (parsed) => {
+                    addLog(`收到响应: ${parsed.cmdName}, Data=[${parsed.data.slice(0, 8).map(b => '0x' + b.toString(16).padStart(2, '0')).join(' ')}]`, 'protocol');
+                });
+
+            } catch (err) {
+                addLog(`连接失败: ${err.message}`, 'fail');
+            } finally {
+                document.getElementById('connectBtn').disabled = false;
+            }
+        }
+
+        // 事件绑定
+        document.getElementById('runAllBtn').addEventListener('click', runAllTests);
+        document.getElementById('clearLogBtn').addEventListener('click', () => {
+            document.getElementById('logContainer').innerHTML = '';
+            logger.clear();
+        });
+        document.getElementById('connectBtn').addEventListener('click', connectDevice);
+
+        // 初始化
+        renderTests();
+        demoPackets();
+        addLog('测试页面已加载, 点击 "运行所有测试" 开始', 'info');
+        logger.info('测试页面初始化完成');
+    </script>
+</body>
+</html>

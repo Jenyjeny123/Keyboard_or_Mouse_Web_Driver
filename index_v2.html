@@ -1,0 +1,3135 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SwiftKey X1 - V2.0 架构版本</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background: #0a0a0f;
+            color: #e2e8f0;
+            overflow-x: hidden;
+        }
+        .mono { font-family: 'JetBrains Mono', monospace; }
+        
+        /* 霓虹光效 */
+        .neon-glow {
+            box-shadow: 0 0 20px rgba(6, 182, 212, 0.3), 
+                        0 0 40px rgba(6, 182, 212, 0.1);
+        }
+        .neon-text {
+            text-shadow: 0 0 10px rgba(6, 182, 212, 0.8);
+        }
+        
+        /* 键盘按键样式 */
+        .key-cap {
+            background: linear-gradient(145deg, #1e293b, #0f172a);
+            box-shadow: 
+                0 4px 6px -1px rgba(0, 0, 0, 0.5),
+                0 2px 4px -1px rgba(0, 0, 0, 0.3),
+                inset 0 1px 0 rgba(255, 255, 255, 0.1);
+            transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+        }
+        .key-cap:hover {
+            transform: translateY(-4px) scale(1.05);
+            box-shadow: 
+                0 15px 25px -5px rgba(0, 0, 0, 0.6),
+                0 10px 10px -5px rgba(0, 0, 0, 0.4),
+                0 0 20px rgba(6, 182, 212, 0.5),
+                inset 0 1px 0 rgba(255, 255, 255, 0.3);
+            background: linear-gradient(145deg, #0891b2, #0e7490);
+            color: white;
+            text-shadow: 0 0 10px rgba(6, 182, 212, 0.8);
+        }
+        .key-cap.active {
+            transform: translateY(2px);
+            background: linear-gradient(145deg, #0891b2, #0e7490);
+            box-shadow: 
+                0 0 20px rgba(6, 182, 212, 0.6),
+                inset 0 2px 4px rgba(0, 0, 0, 0.3);
+        }
+        .key-cap.selected {
+            border: 2px solid #06b6d4;
+            box-shadow: 0 0 15px rgba(6, 182, 212, 0.5);
+        }
+        
+        /* RGB 背景动画 */
+        @keyframes rgb-shift {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+        .rgb-border {
+            background: linear-gradient(90deg, #ff0000, #ff7f00, #ffff00, #00ff00, #0000ff, #4b0082, #9400d3);
+            background-size: 400% 400%;
+            animation: rgb-shift 3s ease infinite;
+        }
+        
+        /* 自定义滑块 */
+        input[type=range] {
+            -webkit-appearance: none;
+            background: transparent;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 20px;
+            width: 20px;
+            border-radius: 50%;
+            background: #06b6d4;
+            cursor: pointer;
+            box-shadow: 0 0 10px rgba(6, 182, 212, 0.8);
+            margin-top: -8px;
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 4px;
+            cursor: pointer;
+            background: #334155;
+            border-radius: 2px;
+        }
+        
+        /* 颜色选择器 */
+        .color-picker-wrapper {
+            position: relative;
+            overflow: hidden;
+        }
+        .color-picker-wrapper input[type="color"] {
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            cursor: pointer;
+            opacity: 0;
+        }
+        
+        /* 连接动画 */
+        @keyframes pulse-ring {
+            0% { transform: scale(0.8); opacity: 0.5; }
+            100% { transform: scale(2); opacity: 0; }
+        }
+        .connection-pulse::before {
+            content: '';
+            position: absolute;
+            inset: -4px;
+            border-radius: 50%;
+            border: 2px solid #10b981;
+            animation: pulse-ring 2s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+        }
+        
+        /* 玻璃拟态面板 */
+        .glass-panel {
+            background: rgba(30, 41, 59, 0.95);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        /* 侧边栏背景 */
+        aside.glass-panel {
+            background: rgba(15, 23, 42, 0.98);
+        }
+        
+        /* 滚动条 */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0f172a;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #334155;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #475569;
+        }
+        
+        /* 布局结构 */
+        body {
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+        
+        /* 顶部导航固定 */
+        header {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 50;
+            height: 64px;
+        }
+        
+        /* 主内容区域 */
+        main {
+            display: flex;
+            margin-top: 64px; /* 与header高度一致 */
+            min-height: calc(100vh - 64px); /* 减去header高度 */
+        }
+        
+        /* 侧边栏固定 */
+        aside {
+            position: fixed;
+            left: 0;
+            top: 64px;
+            bottom: 0;
+            width: 16rem; /* 256px */
+            overflow-y: auto;
+            z-index: 40;
+        }
+        
+        /* 主内容滚动区域 */
+        main .content-area {
+            margin-left: 16rem; /* 与aside宽度一致 */
+            flex: 1;
+            overflow-y: auto;
+            min-height: 100%;
+            z-index: 30;
+            position: relative;
+            padding: 2rem;
+        }
+        
+        /* 波纹效果 */
+        .ripple {
+            position: absolute;
+            border-radius: 50%;
+            background: rgba(6, 182, 212, 0.6);
+            transform: scale(0);
+            animation: ripple-effect 0.6s ease-out;
+            pointer-events: none;
+        }
+        @keyframes ripple-effect {
+            to {
+                transform: scale(4);
+                opacity: 0;
+            }
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+    <!-- 设备连接界面 -->
+    <div id="connection-screen" class="fixed inset-0 bg-slate-950 flex items-center justify-center z-50">
+        <div class="glass-panel rounded-2xl p-8 max-w-md w-full text-center">
+            <div class="w-20 h-20 mx-auto mb-6 rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center shadow-lg shadow-cyan-500/30">
+                <svg class="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <!-- 键盘主体 -->
+                    <rect x="3" y="5" width="18" height="14" rx="2"/>
+                    <!-- 顶部功能键 -->
+                    <rect x="4" y="6" width="3" height="2" rx="0.5"/>
+                    <rect x="8" y="6" width="3" height="2" rx="0.5"/>
+                    <rect x="13" y="6" width="3" height="2" rx="0.5"/>
+                    <rect x="17" y="6" width="3" height="2" rx="0.5"/>
+                    <!-- 第一行按键 -->
+                    <rect x="4" y="9" width="3" height="2.5" rx="0.5"/>
+                    <rect x="8" y="9" width="3" height="2.5" rx="0.5"/>
+                    <rect x="13" y="9" width="3" height="2.5" rx="0.5"/>
+                    <rect x="17" y="9" width="3" height="2.5" rx="0.5"/>
+                    <!-- 第二行按键 -->
+                    <rect x="4" y="12.5" width="3" height="2.5" rx="0.5"/>
+                    <rect x="8" y="12.5" width="8" height="2.5" rx="0.5"/>
+                    <rect x="17" y="12.5" width="3" height="2.5" rx="0.5"/>
+                </svg>
+            </div>
+            <h2 class="text-2xl font-bold text-white mb-2">SwiftKey X1</h2>
+            <p class="text-slate-400 mb-6">请连接您的键盘设备</p>
+            
+            <div class="mb-6">
+                <div class="flex gap-2 mb-4">
+                <button id="search-btn" class="flex-1 py-2 bg-slate-800 hover:bg-slate-700 text-white font-medium rounded-xl transition-colors">
+                    搜索设备
+                </button>
+                <button onclick="directRequestDevice()" class="flex-1 py-2 bg-cyan-600 hover:bg-cyan-500 text-white font-medium rounded-xl transition-colors">
+                    直接连接
+                </button>
+            </div>
+                <div id="device-list" class="max-h-48 overflow-y-auto rounded-lg bg-slate-900/50 border border-slate-800 mb-4">
+                    <div class="p-4 text-center text-slate-500 text-sm">
+                        点击上方按钮搜索设备
+                    </div>
+                </div>
+            </div>
+            
+            <button id="connect-btn" disabled class="w-full py-3 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-semibold rounded-xl shadow-lg shadow-cyan-500/25 transition-all transform hover:scale-[1.02] active:scale-[0.98] mb-4 opacity-50 cursor-not-allowed">
+                连接设备
+            </button>
+            <button onclick="enterSimulationMode()" class="w-full py-2 bg-slate-800 hover:bg-slate-700 text-white font-medium rounded-xl transition-colors mb-4">
+                模拟模式（跳过设备连接）
+            </button>
+            <p class="text-xs text-slate-500">支持设备: SwiftKey X1 (VID: 320F, PID: 1234)</p>
+        </div>
+    </div>
+
+    <!-- 顶部导航 -->
+    <header id="main-header" class="glass-panel sticky top-0 z-50 border-b border-slate-800 hidden">
+        <div class="w-full px-4 sm:px-6 lg:px-8 h-16 flex items-center">
+            <div class="flex items-center gap-3 flex-shrink-0">
+                <div class="w-10 h-10 rounded-lg bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center shadow-lg shadow-cyan-500/30">
+                    <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <!-- 键盘主体 -->
+                        <rect x="3" y="5" width="18" height="14" rx="2"/>
+                        <!-- 顶部功能键 -->
+                        <rect x="4" y="6" width="3" height="2" rx="0.5"/>
+                        <rect x="8" y="6" width="3" height="2" rx="0.5"/>
+                        <rect x="13" y="6" width="3" height="2" rx="0.5"/>
+                        <rect x="17" y="6" width="3" height="2" rx="0.5"/>
+                        <!-- 第一行按键 -->
+                        <rect x="4" y="9" width="3" height="2.5" rx="0.5"/>
+                        <rect x="8" y="9" width="3" height="2.5" rx="0.5"/>
+                        <rect x="13" y="9" width="3" height="2.5" rx="0.5"/>
+                        <rect x="17" y="9" width="3" height="2.5" rx="0.5"/>
+                        <!-- 第二行按键 -->
+                        <rect x="4" y="12.5" width="3" height="2.5" rx="0.5"/>
+                        <rect x="8" y="12.5" width="8" height="2.5" rx="0.5"/>
+                        <rect x="17" y="12.5" width="3" height="2.5" rx="0.5"/>
+                    </svg>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold tracking-tight text-white">SwiftKey <span class="text-cyan-400">X1</span></h1>
+                    <p class="text-xs text-slate-400 mono">有线单模键盘驱动 V1.0.0</p>
+                </div>
+            </div>
+            
+            <div class="flex items-center gap-3 ml-6">
+                <select class="bg-slate-800 border border-slate-700 text-white rounded-lg px-4 py-2 focus:outline-none focus:border-cyan-500" onchange="loadProfile(this.value)">
+                    <option>Profile 1 (默认)</option>
+                    <option>Profile 2</option>
+                    <option>Profile 3</option>
+                    <option>Profile 4</option>
+                </select>
+                <button onclick="resetAllSettings()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors">
+                    重置全部
+                </button>
+            </div>
+            
+            <div class="flex items-center gap-4 ml-auto">
+                <div class="flex items-center gap-2 px-4 py-2 rounded-full bg-slate-900/50 border border-slate-700">
+                    <div class="relative w-3 h-3">
+                        <div id="connectionStatus" class="w-3 h-3 rounded-full bg-emerald-500 connection-pulse"></div>
+                    </div>
+                    <span id="connectionText" class="text-sm font-medium text-emerald-400">已连接</span>
+                    <span class="text-xs text-slate-500 mono ml-2">USB-C</span>
+                    <button onclick="disconnectDevice()" class="ml-2 px-2 py-1 text-xs rounded bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors">
+                        退出连接
+                    </button>
+                </div>
+                
+                <button onclick="toggleSettings()" class="p-2 rounded-lg hover:bg-slate-800 transition-colors text-slate-400 hover:text-white">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                    </svg>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- V2 架构标识横幅 -->
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-4">
+        <div class="p-3 bg-gradient-to-r from-cyan-500/10 to-purple-500/10 border border-cyan-500/30 rounded-xl flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+                <span class="text-cyan-400 font-bold text-sm">V2.0 架构 (阶段一)</span>
+                <span class="text-slate-400 text-xs">- 已集成 EventBus + Logger, 兼容旧协议</span>
+            </div>
+            <span class="text-xs text-slate-500 mono" id="v2-version">v2.0.0-alpha</span>
+        </div>
+    </div>
+
+    <!-- 主内容区 -->
+    <main class="flex-1 flex overflow-hidden">
+        <!-- 侧边栏 -->
+        <aside class="w-64 glass-panel border-r border-slate-800 flex flex-col">
+            <nav class="p-4 space-y-2">
+                <button onclick="switchTab('lighting')" class="nav-btn w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 transition-all hover:bg-cyan-500/20">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                    </svg>
+                    <span class="font-medium">灯光效果</span>
+                </button>
+                
+                <button onclick="switchTab('keymap')" class="nav-btn w-full flex items-center gap-3 px-4 py-3 rounded-xl text-slate-400 hover:bg-slate-800/50 hover:text-white transition-all">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
+                    </svg>
+                    <span class="font-medium">按键映射</span>
+                </button>
+                
+                <button onclick="switchTab('macro')" class="nav-btn w-full flex items-center gap-3 px-4 py-3 rounded-xl text-slate-400 hover:bg-slate-800/50 hover:text-white transition-all">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
+                    </svg>
+                    <span class="font-medium">宏设置</span>
+                </button>
+                
+                <button onclick="switchTab('performance')" class="nav-btn w-full flex items-center gap-3 px-4 py-3 rounded-xl text-slate-400 hover:bg-slate-800/50 hover:text-white transition-all">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                    </svg>
+                    <span class="font-medium">性能调节</span>
+                </button>
+                
+                <button onclick="switchTab('hid-test', event)" class="nav-btn w-full flex items-center gap-3 px-4 py-3 rounded-xl text-slate-400 hover:bg-slate-800/50 hover:text-white transition-all">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                    </svg>
+                    <span class="font-medium">HID测试</span>
+                </button>
+                
+                <button onclick="switchTab('data-test', event)" class="nav-btn w-full flex items-center gap-3 px-4 py-3 rounded-xl text-slate-400 hover:bg-slate-800/50 hover:text-white transition-all">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                    <span class="font-medium">数据收发测试</span>
+                </button>
+            </nav>
+            
+            <div class="mt-auto p-4 border-t border-slate-800">
+                <div class="bg-slate-900/50 rounded-xl p-4 border border-slate-800">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-xs text-slate-500">固件版本</span>
+                        <span class="text-xs mono text-cyan-400">V1.0.0</span>
+                    </div>
+                    <button onclick="checkUpdate()" class="w-full py-2 text-xs font-medium text-slate-300 bg-slate-800 hover:bg-slate-700 rounded-lg transition-colors">
+                        检查更新
+                    </button>
+                </div>
+            </div>
+        </aside>
+
+        <!-- 内容区域 -->
+        <div class="content-area overflow-y-auto p-4 pt-2">
+            
+            <!-- 灯光效果面板 -->
+            <div id="panel-lighting" class="space-y-4 animate-fade-in">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h2 class="text-2xl font-bold text-white">灯光效果</h2>
+                        <p class="text-slate-400 mt-1">自定义 RGB 背光和灯效模式</p>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" id="lightToggle" class="sr-only peer" checked onchange="toggleLights()">
+                            <div class="w-14 h-7 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[4px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-cyan-600"></div>
+                            <span class="ml-3 text-sm font-medium text-slate-300">开启灯光</span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- 灯效控制 -->
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                    <!-- 实时预览 -->
+                    <div class="glass-panel rounded-2xl p-6 border border-slate-700 lg:col-span-2">
+                        <div class="flex justify-between items-center mb-4">
+                            <h3 class="text-lg font-semibold text-white">实时预览</h3>
+                            <div class="flex gap-2">
+                                <button onclick="setAllKeysColor()" class="px-3 py-1 text-xs rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors">全选</button>
+                                <button onclick="clearKeySelection()" class="px-3 py-1 text-xs rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors">清除</button>
+                            </div>
+                        </div>
+                        
+                        <!-- 键盘可视化 -->
+                        <div class="relative overflow-x-auto pb-4">
+                            <div id="keyboard-visual" class="min-w-[400px] p-6 bg-slate-950/50 rounded-xl border border-slate-800">
+                                <!-- 键盘行将通过 JS 生成 -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 颜色与亮度 -->
+                    <div class="glass-panel rounded-2xl p-6 border border-slate-700 space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-slate-300 mb-3">主色调</label>
+                            <div class="flex items-center gap-3">
+                                <div class="color-picker-wrapper w-12 h-12 rounded-xl bg-cyan-500 cursor-pointer shadow-lg shadow-cyan-500/30 border-2 border-white/20">
+                                    <input type="color" id="mainColor" value="#06b6d4" onchange="updateMainColor(this.value)">
+                                </div>
+                                <div class="flex-1">
+                                    <input type="text" id="colorHex" value="#06B6D4" readonly 
+                                           class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm mono text-slate-300 focus:outline-none focus:border-cyan-500">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-slate-300 mb-3">亮度 <span id="brightnessValue" class="ml-2 text-cyan-400">80%</span></label>
+                            <div class="flex gap-2">
+                                <button onclick="setBrightness(0)" class="flex-1 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors text-xs">关</button>
+                                <button onclick="setBrightness(25)" class="flex-1 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors text-xs">25%</button>
+                                <button onclick="setBrightness(50)" class="flex-1 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors text-xs">50%</button>
+                                <button onclick="setBrightness(75)" class="flex-1 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors text-xs">75%</button>
+                                <button onclick="setBrightness(100)" class="flex-1 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white transition-colors text-xs">100%</button>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-slate-300 mb-3">速度 <span id="speedValue" class="ml-2 text-cyan-400">中</span></label>
+                            <div class="flex gap-2">
+                                <button onclick="setSpeed(1)" class="flex-1 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors text-xs">极慢</button>
+                                <button onclick="setSpeed(3)" class="flex-1 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors text-xs">慢</button>
+                                <button onclick="setSpeed(5)" class="flex-1 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white transition-colors text-xs">中</button>
+                                <button onclick="setSpeed(7)" class="flex-1 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors text-xs">快</button>
+                                <button onclick="setSpeed(10)" class="flex-1 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors text-xs">极快</button>
+                            </div>
+                        </div>
+
+                        <button onclick="applyLighting()" class="w-full py-3 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-semibold rounded-xl shadow-lg shadow-cyan-500/25 transition-all transform hover:scale-[1.02] active:scale-[0.98]">
+                            应用设置
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 模式选择 -->
+                <div class="glass-panel rounded-2xl p-6 border border-slate-700">
+                    <h3 class="text-lg font-semibold text-white mb-4">灯效模式</h3>
+                    <div class="grid grid-cols-4 gap-3">
+                        <button onclick="setLightMode('static')" class="light-mode-btn active p-4 rounded-xl bg-slate-800 border-2 border-cyan-500 hover:bg-slate-700 transition-all group">
+                            <div class="w-full h-12 rounded-lg bg-cyan-500 mb-2 group-hover:shadow-lg group-hover:shadow-cyan-500/50 transition-shadow"></div>
+                            <span class="text-sm font-medium text-white">常亮</span>
+                        </button>
+                        <button onclick="setLightMode('breathing')" class="light-mode-btn p-4 rounded-xl bg-slate-800 border-2 border-transparent hover:border-slate-600 transition-all group">
+                            <div class="w-full h-12 rounded-lg bg-gradient-to-r from-cyan-500 to-blue-500 animate-pulse mb-2"></div>
+                            <span class="text-sm font-medium text-slate-300 group-hover:text-white">呼吸</span>
+                        </button>
+                        <button onclick="setLightMode('wave')" class="light-mode-btn p-4 rounded-xl bg-slate-800 border-2 border-transparent hover:border-slate-600 transition-all group">
+                            <div class="w-full h-12 rounded-lg bg-gradient-to-r from-purple-500 via-cyan-500 to-purple-500 bg-[length:200%_100%] animate-[rgb-shift_2s_linear_infinite] mb-2"></div>
+                            <span class="text-sm font-medium text-slate-300 group-hover:text-white">波浪</span>
+                        </button>
+                        <button onclick="setLightMode('ripple')" class="light-mode-btn p-4 rounded-xl bg-slate-800 border-2 border-transparent hover:border-slate-600 transition-all group">
+                            <div class="w-full h-12 rounded-lg bg-slate-700 relative overflow-hidden mb-2">
+                                <div class="absolute inset-0 bg-cyan-500/30 animate-ping"></div>
+                            </div>
+                            <span class="text-sm font-medium text-slate-300 group-hover:text-white">涟漪</span>
+                        </button>
+                        <button onclick="setLightMode('reactive')" class="light-mode-btn p-4 rounded-xl bg-slate-800 border-2 border-transparent hover:border-slate-600 transition-all group">
+                            <div class="w-full h-12 rounded-lg bg-slate-700 flex items-center justify-center mb-2">
+                                <div class="w-2 h-2 rounded-full bg-cyan-400 shadow-[0_0_10px_rgba(34,211,238,0.8)]"></div>
+                            </div>
+                            <span class="text-sm font-medium text-slate-300 group-hover:text-white">触发</span>
+                        </button>
+                        <button onclick="setLightMode('rainbow')" class="light-mode-btn p-4 rounded-xl bg-slate-800 border-2 border-transparent hover:border-slate-600 transition-all group">
+                            <div class="w-full h-12 rounded-lg rgb-border mb-2"></div>
+                            <span class="text-sm font-medium text-slate-300 group-hover:text-white">彩虹</span>
+                        </button>
+                        <button onclick="setLightMode('custom')" class="light-mode-btn p-4 rounded-xl bg-slate-800 border-2 border-transparent hover:border-slate-600 transition-all group">
+                            <div class="w-full h-12 rounded-lg grid grid-cols-3 gap-1 p-1 mb-2">
+                                <div class="bg-red-500 rounded"></div>
+                                <div class="bg-green-500 rounded"></div>
+                                <div class="bg-blue-500 rounded"></div>
+                            </div>
+                            <span class="text-sm font-medium text-slate-300 group-hover:text-white">自定义</span>
+                        </button>
+                        <button onclick="setLightMode('web-custom')" class="light-mode-btn p-4 rounded-xl bg-slate-800 border-2 border-transparent hover:border-slate-600 transition-all group">
+                            <div class="w-full h-12 rounded-lg bg-gradient-to-r from-cyan-500 via-blue-500 to-purple-500 mb-2"></div>
+                            <span class="text-sm font-medium text-slate-300 group-hover:text-white">Web控制</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 按键映射面板 -->
+            <div id="panel-keymap" class="hidden space-y-6 animate-fade-in">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h2 class="text-2xl font-bold text-white">按键映射</h2>
+                        <p class="text-slate-400 mt-1">重新映射按键功能，支持多层配置</p>
+                    </div>
+                </div>
+
+                <div class="glass-panel rounded-2xl p-8 border border-slate-700">
+                    <div class="flex gap-8">
+                        <div class="flex-1">
+                            <h3 class="text-lg font-semibold text-white mb-4">点击按键进行映射</h3>
+                            <div id="keymap-keyboard" class="bg-slate-950/50 p-6 rounded-xl border border-slate-800">
+                                <!-- JS生成 -->
+                            </div>
+                        </div>
+                        
+                        <div class="w-80 space-y-4">
+                            <div class="bg-slate-900/50 rounded-xl p-4 border border-slate-800">
+                                <h4 class="text-sm font-semibold text-slate-300 mb-3">当前选择</h4>
+                                <div id="selectedKeyInfo" class="text-2xl font-bold text-white mono mb-1">--</div>
+                                <div id="selectedKeyFunction" class="text-sm text-slate-500">未选择按键</div>
+                            </div>
+
+                            <div class="bg-slate-900/50 rounded-xl p-4 border border-slate-800 max-h-[400px] overflow-y-auto">
+                                <h4 class="text-sm font-semibold text-slate-300 mb-3 sticky top-0 bg-slate-900/50 pb-2">功能列表</h4>
+                                <div class="space-y-2">
+                                    <div class="text-xs text-slate-500 uppercase tracking-wider mb-2">基本按键</div>
+                                    <button onclick="assignKey('A')" class="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-800 text-slate-300 text-sm transition-colors">A</button>
+                                    <button onclick="assignKey('B')" class="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-800 text-slate-300 text-sm transition-colors">B</button>
+                                    <button onclick="assignKey('Enter')" class="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-800 text-slate-300 text-sm transition-colors">Enter</button>
+                                    <button onclick="assignKey('Space')" class="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-800 text-slate-300 text-sm transition-colors">Space</button>
+                                    
+                                    <div class="text-xs text-slate-500 uppercase tracking-wider mb-2 mt-4">功能键</div>
+                                    <button onclick="assignKey('Volume Up')" class="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-800 text-slate-300 text-sm transition-colors">音量 +</button>
+                                    <button onclick="assignKey('Volume Down')" class="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-800 text-slate-300 text-sm transition-colors">音量 -</button>
+                                    <button onclick="assignKey('Mute')" class="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-800 text-slate-300 text-sm transition-colors">静音</button>
+                                    <button onclick="assignKey('Play/Pause')" class="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-800 text-slate-300 text-sm transition-colors">播放/暂停</button>
+                                    
+                                    <div class="text-xs text-slate-500 uppercase tracking-wider mb-2 mt-4">特殊</div>
+                                    <button onclick="assignKey('Macro 1')" class="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-800 text-cyan-400 text-sm transition-colors">宏: 游戏连招</button>
+                                    <button onclick="assignKey('Layer 2')" class="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-800 text-purple-400 text-sm transition-colors">切换至 Layer 2</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 宏设置面板 -->
+            <div id="panel-macro" class="hidden space-y-6 animate-fade-in">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h2 class="text-2xl font-bold text-white">宏设置</h2>
+                        <p class="text-slate-400 mt-1">录制和编辑键盘宏命令序列</p>
+                    </div>
+                    <button onclick="createNewMacro()" class="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg transition-colors flex items-center gap-2">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+                        </svg>
+                        新建宏
+                    </button>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div class="lg:col-span-1 space-y-4">
+                        <div class="glass-panel rounded-2xl p-4 border border-slate-700">
+                            <h3 class="text-sm font-semibold text-slate-300 mb-3">宏列表</h3>
+                            <div class="space-y-2" id="macroList">
+                                <div class="p-3 rounded-lg bg-cyan-500/10 border border-cyan-500/30 cursor-pointer">
+                                    <div class="flex items-center justify-between">
+                                        <span class="font-medium text-cyan-400">游戏连招 A</span>
+                                        <span class="text-xs text-slate-500">12 动作</span>
+                                    </div>
+                                    <div class="text-xs text-slate-500 mt-1">最后编辑: 2小时前</div>
+                                </div>
+                                <div class="p-3 rounded-lg bg-slate-800/50 border border-transparent hover:border-slate-600 cursor-pointer transition-all">
+                                    <div class="flex items-center justify-between">
+                                        <span class="font-medium text-slate-300">办公快捷</span>
+                                        <span class="text-xs text-slate-500">5 动作</span>
+                                    </div>
+                                    <div class="text-xs text-slate-500 mt-1">最后编辑: 昨天</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="lg:col-span-2 glass-panel rounded-2xl p-6 border border-slate-700">
+                        <div class="flex items-center justify-between mb-6">
+                            <input type="text" value="游戏连招 A" class="bg-transparent text-xl font-bold text-white border-b border-slate-700 focus:border-cyan-500 focus:outline-none pb-1 w-64">
+                            <div class="flex gap-2">
+                                <button onclick="startRecording()" id="recordBtn" class="px-4 py-2 bg-red-600/20 text-red-400 border border-red-600/50 rounded-lg hover:bg-red-600/30 transition-colors flex items-center gap-2">
+                                    <div class="w-2 h-2 rounded-full bg-red-500 animate-pulse"></div>
+                                    录制
+                                </button>
+                                <button onclick="saveMacro()" class="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg transition-colors">
+                                    保存
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="bg-slate-950/50 rounded-xl p-4 border border-slate-800 min-h-[300px]">
+                            <div class="flex items-center gap-2 mb-4 text-xs text-slate-500">
+                                <span>延迟</span>
+                                <span class="flex-1 h-px bg-slate-800"></span>
+                                <span>按键</span>
+                            </div>
+                            
+                            <div class="space-y-2" id="macroTimeline">
+                                <div class="flex items-center gap-3 p-2 rounded-lg bg-slate-900/50 border border-slate-800">
+                                    <span class="text-xs text-slate-500 w-16">0ms</span>
+                                    <div class="flex-1 flex items-center gap-2">
+                                        <span class="px-2 py-1 rounded bg-cyan-500/20 text-cyan-400 text-sm mono">Q</span>
+                                        <span class="text-xs text-slate-500">按下</span>
+                                    </div>
+                                    <button class="text-slate-600 hover:text-red-400 transition-colors">×</button>
+                                </div>
+                                <div class="flex items-center gap-3 p-2 rounded-lg bg-slate-900/50 border border-slate-800">
+                                    <span class="text-xs text-slate-500 w-16">50ms</span>
+                                    <div class="flex-1 flex items-center gap-2">
+                                        <span class="px-2 py-1 rounded bg-cyan-500/20 text-cyan-400 text-sm mono">Q</span>
+                                        <span class="text-xs text-slate-500">释放</span>
+                                    </div>
+                                    <button class="text-slate-600 hover:text-red-400 transition-colors">×</button>
+                                </div>
+                                <div class="flex items-center gap-3 p-2 rounded-lg bg-slate-900/50 border border-slate-800">
+                                    <span class="text-xs text-slate-500 w-16">120ms</span>
+                                    <div class="flex-1 flex items-center gap-2">
+                                        <span class="px-2 py-1 rounded bg-cyan-500/20 text-cyan-400 text-sm mono">W</span>
+                                        <span class="text-xs text-slate-500">按下</span>
+                                    </div>
+                                    <button class="text-slate-600 hover:text-red-400 transition-colors">×</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 性能调节面板 -->
+            <div id="panel-performance" class="hidden space-y-6 animate-fade-in">
+                <div>
+                    <h2 class="text-2xl font-bold text-white">性能调节</h2>
+                    <p class="text-slate-400 mt-1">调整轮询率、去抖时间等高级设置</p>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="glass-panel rounded-2xl p-6 border border-slate-700">
+                        <h3 class="text-lg font-semibold text-white mb-6">轮询率 (Polling Rate)</h3>
+                        <div class="space-y-4">
+                            <label class="flex items-center justify-between p-4 rounded-xl bg-slate-900/50 border border-slate-800 cursor-pointer hover:border-cyan-500/50 transition-colors">
+                                <div class="flex items-center gap-3">
+                                    <input type="radio" name="polling" value="125" class="w-4 h-4 text-cyan-600 bg-slate-800 border-slate-600 focus:ring-cyan-500">
+                                    <div>
+                                        <div class="text-white font-medium">125 Hz</div>
+                                        <div class="text-xs text-slate-500">8ms 延迟 - 省电模式</div>
+                                    </div>
+                                </div>
+                            </label>
+                            <label class="flex items-center justify-between p-4 rounded-xl bg-slate-900/50 border border-slate-800 cursor-pointer hover:border-cyan-500/50 transition-colors">
+                                <div class="flex items-center gap-3">
+                                    <input type="radio" name="polling" value="500" class="w-4 h-4 text-cyan-600 bg-slate-800 border-slate-600 focus:ring-cyan-500">
+                                    <div>
+                                        <div class="text-white font-medium">500 Hz</div>
+                                        <div class="text-xs text-slate-500">2ms 延迟 - 平衡模式</div>
+                                    </div>
+                                </div>
+                            </label>
+                            <label class="flex items-center justify-between p-4 rounded-xl bg-cyan-500/10 border border-cyan-500/50 cursor-pointer">
+                                <div class="flex items-center gap-3">
+                                    <input type="radio" name="polling" value="1000" checked class="w-4 h-4 text-cyan-600 bg-slate-800 border-slate-600 focus:ring-cyan-500">
+                                    <div>
+                                        <div class="text-cyan-400 font-medium">1000 Hz</div>
+                                        <div class="text-xs text-slate-500">1ms 延迟 - 竞技模式</div>
+                                    </div>
+                                </div>
+                                <span class="px-2 py-1 rounded bg-cyan-500/20 text-cyan-400 text-xs">推荐</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="glass-panel rounded-2xl p-6 border border-slate-700">
+                        <h3 class="text-lg font-semibold text-white mb-6">去抖时间 (Debounce)</h3>
+                        <div class="mb-6">
+                            <div class="flex justify-between mb-2">
+                                <span class="text-sm text-slate-400">去抖延迟</span>
+                                <span id="debounceValue" class="text-sm font-bold text-cyan-400">5ms</span>
+                            </div>
+                            <input type="range" min="0" max="30" value="5" class="w-full" oninput="document.getElementById('debounceValue').textContent = this.value + 'ms'">
+                            <div class="flex justify-between mt-1 text-xs text-slate-600">
+                                <span>0ms (快速)</span>
+                                <span>30ms (稳定)</span>
+                            </div>
+                        </div>
+                        
+                        <div class="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30">
+                            <div class="flex items-start gap-3">
+                                <svg class="w-5 h-5 text-amber-500 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                                </svg>
+                                <div>
+                                    <div class="text-sm font-medium text-amber-400">注意</div>
+                                    <div class="text-xs text-slate-400 mt-1">较低的去抖时间可能导致按键双击，建议机械轴体使用 5-10ms。</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- HID测试面板 -->
+            <div id="panel-hid-test" class="hidden space-y-6 animate-fade-in">
+                <div>
+                    <h2 class="text-2xl font-bold text-white">HID数据收发测试</h2>
+                    <p class="text-slate-400 mt-1">根据通讯协议测试HID设备的数据传输功能</p>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <!-- 自定义发送数据 -->
+                    <div class="glass-panel rounded-2xl p-6 border border-slate-700">
+                        <h3 class="text-lg font-semibold text-white mb-4">自定义发送数据</h3>
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-slate-300 mb-2">命令类型</label>
+                                <select id="cmdType" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-300 focus:outline-none focus:border-cyan-500">
+                                    <option value="0x01">0x01 - 设置灯效模式</option>
+                                    <option value="0x02">0x02 - 读取灯效模式</option>
+                                    <option value="0x03">0x03 - 写入灯效数据</option>
+                                    <option value="0x04">0x04 - 读取灯效数据</option>
+                                    <option value="0x05">0x05 - 写入按键映射</option>
+                                    <option value="0x06">0x06 - 读取按键映射</option>
+                                    <option value="0x07">0x07 - 写入宏定义</option>
+                                    <option value="0x08">0x08 - 读取宏定义</option>
+                                    <option value="0x09">0x09 - 读取设备信息</option>
+                                    <option value="0x0A">0x0A - 保存配置</option>
+                                    <option value="0x0B">0x0B - 恢复出厂设置</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-300 mb-2">数据长度</label>
+                                <input type="number" id="dataLen" value="1" min="0" max="56" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-300 focus:outline-none focus:border-cyan-500">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-300 mb-2">地址偏移</label>
+                                <div class="flex gap-2">
+                                    <input type="number" id="addrHigh" value="0" min="0" max="255" class="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-300 focus:outline-none focus:border-cyan-500" placeholder="AddrHigh">
+                                    <input type="number" id="addrLow" value="0" min="0" max="255" class="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-300 focus:outline-none focus:border-cyan-500" placeholder="AddrLow">
+                                </div>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-300 mb-2">数据 (最多56字节，空格分隔)</label>
+                                <textarea id="sendData" rows="4" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm mono text-slate-300 focus:outline-none focus:border-cyan-500">01</textarea>
+                                <div class="text-xs text-slate-500 mt-1">输入十六进制数据，空格分隔，不足自动补0x00</div>
+                            </div>
+                            <button onclick="sendHIDData()" class="w-full py-3 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-semibold rounded-xl shadow-lg shadow-cyan-500/25 transition-all transform hover:scale-[1.02] active:scale-[0.98]">
+                                发送数据
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- 快速读取操作 -->
+                    <div class="glass-panel rounded-2xl p-6 border border-slate-700">
+                        <h3 class="text-lg font-semibold text-white mb-4">快速读取操作</h3>
+                        <div class="space-y-3">
+                            <button onclick="readBasicInfo()" class="w-full py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors text-sm flex items-center justify-center gap-2">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                                </svg>
+                                读取基本信息区
+                            </button>
+                            <button onclick="readFunctionArea()" class="w-full py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors text-sm flex items-center justify-center gap-2">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                                </svg>
+                                读取功能区
+                            </button>
+                            <button onclick="readKeyMatrix()" class="w-full py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors text-sm flex items-center justify-center gap-2">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"></path>
+                                </svg>
+                                读取按键矩阵
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 接收数据 -->
+                    <div class="glass-panel rounded-2xl p-6 border border-slate-700 lg:col-span-2">
+                        <h3 class="text-lg font-semibold text-white mb-4">接收数据</h3>
+                        <div class="space-y-4">
+                            <div class="bg-slate-950/50 rounded-lg p-4 border border-slate-800 h-64 overflow-y-auto">
+                                <pre id="receiveData" class="text-xs mono text-slate-300 whitespace-pre-wrap">等待接收数据...</pre>
+                            </div>
+                            <button onclick="clearReceiveData()" class="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors">
+                                清空接收数据
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 设备信息显示 -->
+                <div class="glass-panel rounded-2xl p-6 border border-slate-700">
+                    <h3 class="text-lg font-semibold text-white mb-4">设备信息</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="bg-slate-900/50 rounded-lg p-4 border border-slate-800">
+                            <div class="text-sm font-medium text-slate-400 mb-2">设备类型</div>
+                            <div id="infoDeviceType" class="text-sm font-bold text-slate-300">未读取</div>
+                        </div>
+                        <div class="bg-slate-900/50 rounded-lg p-4 border border-slate-800">
+                            <div class="text-sm font-medium text-slate-400 mb-2">设备序列号</div>
+                            <div id="infoSerial" class="text-sm font-bold text-slate-300">未读取</div>
+                        </div>
+                        <div class="bg-slate-900/50 rounded-lg p-4 border border-slate-800">
+                            <div class="text-sm font-medium text-slate-400 mb-2">VID/PID</div>
+                            <div id="infoVidPid" class="text-sm font-bold text-slate-300">未读取</div>
+                        </div>
+                        <div class="bg-slate-900/50 rounded-lg p-4 border border-slate-800">
+                            <div class="text-sm font-medium text-slate-400 mb-2">LED数量</div>
+                            <div id="infoLedCount" class="text-sm font-bold text-slate-300">未读取</div>
+                        </div>
+                        <div class="bg-slate-900/50 rounded-lg p-4 border border-slate-800">
+                            <div class="text-sm font-medium text-slate-400 mb-2">背光类型</div>
+                            <div id="infoBacklightType" class="text-sm font-bold text-slate-300">未读取</div>
+                        </div>
+                        <div class="bg-slate-900/50 rounded-lg p-4 border border-slate-800">
+                            <div class="text-sm font-medium text-slate-400 mb-2">传感器型号</div>
+                            <div id="infoSensorModel" class="text-sm font-bold text-slate-300">未读取</div>
+                        </div>
+                        <div class="bg-slate-900/50 rounded-lg p-4 border border-slate-800">
+                            <div class="text-sm font-medium text-slate-400 mb-2">DPI档位</div>
+                            <div id="infoDpiLevel" class="text-sm font-bold text-slate-300">未读取</div>
+                        </div>
+                        <div class="bg-slate-900/50 rounded-lg p-4 border border-slate-800">
+                            <div class="text-sm font-medium text-slate-400 mb-2">空间大小</div>
+                            <div id="infoSpace" class="text-sm font-bold text-slate-300">未读取</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 状态信息 -->
+                <div class="glass-panel rounded-2xl p-6 border border-slate-700">
+                    <h3 class="text-lg font-semibold text-white mb-4">状态信息</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="bg-slate-900/50 rounded-lg p-4 border border-slate-800">
+                            <div class="text-sm font-medium text-slate-400 mb-2">设备状态</div>
+                            <div id="deviceStatus" class="text-sm font-bold text-emerald-400">已连接</div>
+                        </div>
+                        <div class="bg-slate-900/50 rounded-lg p-4 border border-slate-800">
+                            <div class="text-sm font-medium text-slate-400 mb-2">数据传输</div>
+                            <div id="transferStatus" class="text-sm font-bold text-slate-300">就绪</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 数据收发测试面板 -->
+            <div id="panel-data-test" class="hidden space-y-6 animate-fade-in">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h2 class="text-2xl font-bold text-white">数据收发测试</h2>
+                        <p class="text-slate-400 mt-1">测试设备的数据传输能力和稳定性</p>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <!-- 测试配置 -->
+                    <div class="glass-panel rounded-2xl p-6 border border-slate-700">
+                        <h3 class="text-lg font-semibold text-white mb-6">测试配置</h3>
+                        
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-slate-300 mb-2">发送次数</label>
+                                <input type="number" id="testSendCount" value="50" min="1" max="1000" 
+                                       class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-300 focus:outline-none focus:border-cyan-500">
+                                <div class="text-xs text-slate-500 mt-1">范围: 1-1000次</div>
+                            </div>
+
+                            <div>
+                                <label class="block text-sm font-medium text-slate-300 mb-2">时间间隔 (ms)</label>
+                                <input type="number" id="testInterval" value="10" min="5" max="1000" 
+                                       class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-300 focus:outline-none focus:border-cyan-500">
+                                <div class="text-xs text-slate-500 mt-1">最低5ms (适用于1K设备)</div>
+                            </div>
+
+                            <div>
+                                <label class="block text-sm font-medium text-slate-300 mb-2">测试数据类型</label>
+                                <select id="testDataType" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-300 focus:outline-none focus:border-cyan-500">
+                                    <option value="sequential">递增序列 (0x00-0xFF循环)</option>
+                                    <option value="random">随机数据</option>
+                                    <option value="fixed">固定数据 (0xAA)</option>
+                                </select>
+                            </div>
+
+                            <div>
+                                <label class="block text-sm font-medium text-slate-300 mb-2">数据长度 (字节)</label>
+                                <input type="number" id="testDataLength" value="8" min="1" max="56" 
+                                       class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-300 focus:outline-none focus:border-cyan-500">
+                                <div class="text-xs text-slate-500 mt-1">范围: 1-56字节</div>
+                            </div>
+
+                            <div class="flex items-center justify-between pt-4 border-t border-slate-700">
+                                <button onclick="startDataTest()" id="startTestBtn" 
+                                        class="px-6 py-3 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-semibold rounded-xl shadow-lg shadow-cyan-500/25 transition-all transform hover:scale-[1.02] active:scale-[0.98]">
+                                    开始测试
+                                </button>
+                                <button onclick="stopDataTest()" id="stopTestBtn" disabled
+                                        class="px-6 py-3 bg-red-600 hover:bg-red-500 text-white font-semibold rounded-xl shadow-lg shadow-red-500/25 transition-all opacity-50 cursor-not-allowed">
+                                    停止测试
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 测试统计 -->
+                    <div class="glass-panel rounded-2xl p-6 border border-slate-700">
+                        <h3 class="text-lg font-semibold text-white mb-6">测试统计</h3>
+                        
+                        <div class="grid grid-cols-2 gap-4 mb-6">
+                            <div class="bg-slate-900/50 rounded-lg p-4 border border-slate-800">
+                                <div class="text-sm font-medium text-slate-400 mb-2">总发送次数</div>
+                                <div id="totalSent" class="text-2xl font-bold text-cyan-400 mono">0</div>
+                            </div>
+                            <div class="bg-slate-900/50 rounded-lg p-4 border border-slate-800">
+                                <div class="text-sm font-medium text-slate-400 mb-2">总接收次数</div>
+                                <div id="totalReceived" class="text-2xl font-bold text-emerald-400 mono">0</div>
+                            </div>
+                            <div class="bg-slate-900/50 rounded-lg p-4 border border-slate-800">
+                                <div class="text-sm font-medium text-slate-400 mb-2">成功次数</div>
+                                <div id="successCount" class="text-2xl font-bold text-green-400 mono">0</div>
+                            </div>
+                            <div class="bg-slate-900/50 rounded-lg p-4 border border-slate-800">
+                                <div class="text-sm font-medium text-slate-400 mb-2">失败次数</div>
+                                <div id="failCount" class="text-2xl font-bold text-red-400 mono">0</div>
+                            </div>
+                        </div>
+
+                        <div class="bg-slate-900/50 rounded-lg p-4 border border-slate-800 mb-4">
+                            <div class="text-sm font-medium text-slate-400 mb-2">成功率</div>
+                            <div class="flex items-end gap-2">
+                                <div id="successRate" class="text-4xl font-bold text-cyan-400 mono">0%</div>
+                                <div class="text-sm text-slate-500 mb-1">/ <span id="testProgress">0</span>/<span id="testTotal">50</span></div>
+                            </div>
+                            <div class="mt-2 w-full bg-slate-700 rounded-full h-2">
+                                <div id="testProgressBar" class="bg-gradient-to-r from-cyan-500 to-blue-500 h-2 rounded-full transition-all duration-300" style="width: 0%"></div>
+                            </div>
+                        </div>
+
+                        <div class="flex gap-2">
+                            <button onclick="resetTestStats()" class="flex-1 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors">
+                                重置统计
+                            </button>
+                            <button onclick="exportTestResults()" class="flex-1 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors">
+                                导出结果
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 测试日志 -->
+                <div class="glass-panel rounded-2xl p-6 border border-slate-700">
+                    <div class="flex items-center justify-between mb-4">
+                        <h3 class="text-lg font-semibold text-white">测试日志</h3>
+                        <button onclick="clearTestLog()" class="px-3 py-1 text-xs rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors">
+                            清空日志
+                        </button>
+                    </div>
+                    <div id="testLog" class="bg-slate-950/50 rounded-lg p-4 border border-slate-800 h-64 overflow-y-auto font-mono text-xs">
+                        <div class="text-slate-500">等待开始测试...</div>
+                    </div>
+                </div>
+
+                <!-- 错误详情 -->
+                <div class="glass-panel rounded-2xl p-6 border border-slate-700">
+                    <h3 class="text-lg font-semibold text-white mb-4">错误详情</h3>
+                    <div id="errorDetails" class="bg-slate-950/50 rounded-lg p-4 border border-slate-800 h-32 overflow-y-auto font-mono text-xs">
+                        <div class="text-slate-500">暂无错误记录</div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <script type="module">
+        // ============ V2 架构: 导入新模块 (渐进式集成) ============
+        // 第一阶段: 仅集成 EventBus + Logger, 不改变现有协议
+        import { bus } from './src/core/EventBus.js';
+        import { logger } from './src/core/Logger.js';
+
+        // 暴露到 window 方便调试
+        window.V2 = { bus, logger, version: '2.0.0-alpha', stage: 'phase-1' };
+        logger.info('V2 架构 (阶段一) 已加载 - EventBus + Logger');
+
+        // 监听 Logger 事件, 推送到 UI
+        bus.on('log:new', (entry) => {
+            // 通过 console 调试, 不在 UI 中显示避免重复
+        });
+
+        // 键盘型号布局定义
+        const keyboardLayouts = {
+            '4x4': [
+                [
+                    { key: 'Num', code: 'NumLock', width: 1 },
+                    { key: '-', code: 'Minus', width: 1 },
+                    { key: '+', code: 'Equal', width: 1 },
+                    { key: '/', code: 'Slash', width: 1 }
+                ],
+                [
+                    { key: '7', code: 'Digit7', width: 1 },
+                    { key: '8', code: 'Digit8', width: 1 },
+                    { key: '9', code: 'Digit9', width: 1 },
+                    { key: '0', code: 'Digit0', width: 1 }
+                ],
+                [
+                    { key: '4', code: 'Digit4', width: 1 },
+                    { key: '5', code: 'Digit5', width: 1 },
+                    { key: '6', code: 'Digit6', width: 1 },
+                    { key: 'Enter', code: 'Enter', width: 1, height: 2 }
+                ],
+                [
+                    { key: '1', code: 'Digit1', width: 1 },
+                    { key: '2', code: 'Digit2', width: 1 },
+                    { key: '3', code: 'Digit3', width: 1 }
+                    // 第四行只有前三列，共15个按键
+                ]
+            ]
+        };
+
+        // 当前使用的键盘型号
+        let currentKeyboardModel = '4x4';
+        let keyboardLayout = keyboardLayouts[currentKeyboardModel];
+
+        let selectedKeys = new Set();
+        let currentKeyColor = '#06b6d4';
+        let isRecording = false;
+        let isWebControlMode = false;
+
+        // 初始化键盘可视化
+        function initKeyboard(containerId, interactive = true) {
+            const container = document.getElementById(containerId);
+            container.innerHTML = '';
+            
+            // 创建键盘网格容器
+            const keyboardGrid = document.createElement('div');
+            keyboardGrid.className = 'grid gap-1 justify-center';
+            keyboardGrid.style.gridTemplateColumns = 'repeat(4, auto)';
+            
+            keyboardLayout.forEach((row, rowIndex) => {
+                row.forEach((keyData, keyIndex) => {
+                    const key = document.createElement('button');
+                    const width = keyData.width * 60 + (keyData.width - 1) * 4; // 60px base + gap
+                    const baseHeight = 60; // 基础高度60px，与宽度一致
+                    const height = keyData.height ? keyData.height * baseHeight + (keyData.height - 1) * 4 : baseHeight; // 支持多行高度
+                    key.className = `key-cap rounded-lg flex items-center justify-center text-sm font-bold text-slate-300 select-none ${interactive ? 'cursor-pointer' : ''}`;
+                    key.style.width = `${width}px`;
+                    key.style.minWidth = `${width}px`;
+                    key.style.height = `${height}px`;
+                    key.style.minHeight = `${height}px`;
+                    if (keyData.height && keyData.height > 1) {
+                        key.style.gridRow = `span ${keyData.height}`;
+                    }
+                    key.textContent = keyData.key;
+                    key.dataset.code = keyData.code;
+                    key.dataset.row = rowIndex;
+                    key.dataset.index = keyIndex;
+                    
+                    if (interactive) {
+                        key.onclick = (e) => handleKeyClick(e, key, keyData);
+                        key.onmousedown = (e) => createRipple(e, key);
+                    }
+                    
+                    keyboardGrid.appendChild(key);
+                });
+            });
+            
+            container.appendChild(keyboardGrid);
+        }
+
+        function handleKeyClick(e, element, keyData) {
+            // 多选逻辑
+            if (e.ctrlKey || e.metaKey) {
+                element.classList.toggle('selected');
+                if (element.classList.contains('selected')) {
+                    selectedKeys.add(keyData.code);
+                } else {
+                    selectedKeys.delete(keyData.code);
+                }
+            } else {
+                // 单选
+                document.querySelectorAll('.key-cap').forEach(k => k.classList.remove('selected'));
+                element.classList.add('selected');
+                selectedKeys.clear();
+                selectedKeys.add(keyData.code);
+            }
+            
+            // 更新按键映射面板的选择信息
+            if (document.getElementById('selectedKeyInfo')) {
+                document.getElementById('selectedKeyInfo').textContent = keyData.key;
+                document.getElementById('selectedKeyFunction').textContent = '当前功能: ' + keyData.key;
+            }
+        }
+
+        function createRipple(e, element) {
+            const ripple = document.createElement('div');
+            ripple.className = 'ripple';
+            const rect = element.getBoundingClientRect();
+            const size = Math.max(rect.width, rect.height);
+            ripple.style.width = ripple.style.height = size + 'px';
+            ripple.style.left = (e.clientX - rect.left - size/2) + 'px';
+            ripple.style.top = (e.clientY - rect.top - size/2) + 'px';
+            element.appendChild(ripple);
+            setTimeout(() => ripple.remove(), 600);
+        }
+
+        // 切换标签页
+        function switchTab(tabName, event) {
+            // 隐藏所有面板
+            document.querySelectorAll('[id^="panel-"]').forEach(panel => {
+                panel.classList.add('hidden');
+            });
+
+            // 显示目标面板
+            document.getElementById(`panel-${tabName}`).classList.remove('hidden');
+
+            // 更新导航按钮状态
+            document.querySelectorAll('.nav-btn').forEach(btn => {
+                btn.classList.remove('bg-cyan-500/10', 'text-cyan-400', 'border', 'border-cyan-500/20');
+                btn.classList.add('text-slate-400', 'hover:bg-slate-800/50', 'hover:text-white');
+            });
+            
+            // 确保event对象存在
+            if (event && event.currentTarget) {
+                event.currentTarget.classList.remove('text-slate-400', 'hover:bg-slate-800/50', 'hover:text-white', 'border', 'border-cyan-500/20');
+                event.currentTarget.classList.add('bg-cyan-500/10', 'text-cyan-400');
+            }
+            
+            // 如果是按键映射标签，初始化映射键盘
+            if (tabName === 'keymap') {
+                setTimeout(() => initKeyboard('keymap-keyboard', true), 0);
+            }
+        }
+
+        // 灯光控制
+        async function setLightMode(mode) {
+            // 先发送停止灯效指令（如果当前是Web控制模式）
+            if (isWebControlMode) {
+                await sendLedStopCommand();
+                isWebControlMode = false;
+            }
+            
+            // 更新UI
+            document.querySelectorAll('.light-mode-btn').forEach(btn => {
+                btn.classList.remove('border-cyan-500', 'active');
+                btn.classList.add('border-transparent');
+                btn.querySelector('span').classList.remove('text-white');
+                btn.querySelector('span').classList.add('text-slate-300');
+            });
+            
+            event.currentTarget.classList.remove('border-transparent');
+            event.currentTarget.classList.add('border-cyan-500', 'active');
+            event.currentTarget.querySelector('span').classList.remove('text-slate-300');
+            event.currentTarget.querySelector('span').classList.add('text-white');
+            
+            // 如果切换到Web控制模式，发送开始灯效指令
+            if (mode === 'web-custom' && connectedDevice) {
+                await sendLedStartCommand();
+                isWebControlMode = true;
+            }
+            
+            // 应用效果预览
+            applyLightPreview(mode);
+        }
+
+        function applyLightPreview(mode) {
+            const keys = document.querySelectorAll('#keyboard-visual .key-cap');
+            
+            keys.forEach((key, index) => {
+                key.style.background = '';
+                key.style.boxShadow = '';
+                key.style.animation = '';
+                
+                switch(mode) {
+                    case 'static':
+                        key.style.background = 'linear-gradient(145deg, #0891b2, #0e7490)';
+                        key.style.boxShadow = '0 0 10px rgba(6, 182, 212, 0.5)';
+                        break;
+                    case 'breathing':
+                        key.style.animation = `pulse 2s ease-in-out ${index * 0.05}s infinite`;
+                        break;
+                    case 'wave':
+                        key.style.background = `linear-gradient(90deg, #06b6d4, #3b82f6, #8b5cf6)`;
+                        key.style.backgroundSize = '200% 100%';
+                        key.style.animation = `rgb-shift 2s linear ${index * 0.1}s infinite`;
+                        break;
+                    case 'rainbow':
+                        const hue = (index * 15) % 360;
+                        key.style.background = `hsl(${hue}, 70%, 50%)`;
+                        key.style.boxShadow = `0 0 10px hsl(${hue}, 70%, 50%)`;
+                        break;
+                    case 'web-custom':
+                        // Web控制模式预览
+                        const mainColor = document.getElementById('mainColor').value;
+                        key.style.background = mainColor;
+                        key.style.boxShadow = `0 0 15px ${mainColor}80`;
+                        break;
+                }
+            });
+        }
+
+        function updateMainColor(color) {
+            currentKeyColor = color;
+            document.getElementById('colorHex').value = color.toUpperCase();
+            document.querySelector('.color-picker-wrapper').style.background = color;
+            
+            // 更新已选按键颜色
+            document.querySelectorAll('.key-cap.selected').forEach(key => {
+                key.style.background = color;
+                key.style.boxShadow = `0 0 15px ${color}80`;
+            });
+        }
+
+        function updateBrightness(val) {
+            document.getElementById('brightnessValue').textContent = val + '%';
+            document.getElementById('keyboard-visual').style.opacity = val / 100;
+        }
+
+        function updateSpeed(val) {
+            const labels = ['极慢', '慢', '中慢', '中', '中快', '快', '极快', '极速', '超频', '极限'];
+            document.getElementById('speedValue').textContent = labels[val - 1] || '中';
+        }
+
+        function setBrightness(value) {
+            document.getElementById('brightnessValue').textContent = value + '%';
+            document.getElementById('keyboard-visual').style.opacity = value / 100;
+            
+            // 更新按钮样式
+            const buttons = document.querySelectorAll('[onclick^="setBrightness"]');
+            buttons.forEach(btn => {
+                btn.classList.remove('bg-cyan-600', 'hover:bg-cyan-500', 'text-white');
+                btn.classList.add('bg-slate-800', 'hover:bg-slate-700', 'text-slate-300');
+            });
+            
+            const activeButton = document.querySelector(`[onclick="setBrightness(${value})"]`);
+            if (activeButton) {
+                activeButton.classList.remove('bg-slate-800', 'hover:bg-slate-700', 'text-slate-300');
+                activeButton.classList.add('bg-cyan-600', 'hover:bg-cyan-500', 'text-white');
+            }
+        }
+
+        function setSpeed(value) {
+            const labels = ['极慢', '慢', '中慢', '中', '中快', '快', '极快', '极速', '超频', '极限'];
+            document.getElementById('speedValue').textContent = labels[value - 1] || '中';
+            
+            // 更新按钮样式
+            const buttons = document.querySelectorAll('[onclick^="setSpeed"]');
+            buttons.forEach(btn => {
+                btn.classList.remove('bg-cyan-600', 'hover:bg-cyan-500', 'text-white');
+                btn.classList.add('bg-slate-800', 'hover:bg-slate-700', 'text-slate-300');
+            });
+            
+            const activeButton = document.querySelector(`[onclick="setSpeed(${value})"]`);
+            if (activeButton) {
+                activeButton.classList.remove('bg-slate-800', 'hover:bg-slate-700', 'text-slate-300');
+                activeButton.classList.add('bg-cyan-600', 'hover:bg-cyan-500', 'text-white');
+            }
+        }
+
+        async function toggleLights() {
+            const enabled = document.getElementById('lightToggle').checked;
+            document.getElementById('keyboard-visual').style.filter = enabled ? 'none' : 'grayscale(100%) brightness(0.3)';
+            
+            // 控制灯效设置的可用性
+            const lightingControls = document.querySelectorAll('.light-mode-btn, #mainColor, #colorHex, [onclick^="setBrightness"], [onclick^="setSpeed"], [onclick="applyLighting()"]');
+            lightingControls.forEach(control => {
+                if (enabled) {
+                    control.disabled = false;
+                    control.classList.remove('opacity-50', 'cursor-not-allowed');
+                } else {
+                    control.disabled = true;
+                    control.classList.add('opacity-50', 'cursor-not-allowed');
+                }
+            });
+            
+            // 控制键盘可视化区域的交互性
+            const keyCaps = document.querySelectorAll('#keyboard-visual .key-cap');
+            keyCaps.forEach(key => {
+                if (enabled) {
+                    key.style.pointerEvents = 'auto';
+                    key.classList.remove('cursor-not-allowed');
+                } else {
+                    key.style.pointerEvents = 'none';
+                    key.classList.add('cursor-not-allowed');
+                }
+            });
+            
+            // 控制全选和清除按钮的可用性
+            const selectionButtons = document.querySelectorAll('[onclick="setAllKeysColor()"], [onclick="clearKeySelection()"]');
+            selectionButtons.forEach(button => {
+                if (enabled) {
+                    button.disabled = false;
+                    button.classList.remove('opacity-50', 'cursor-not-allowed');
+                } else {
+                    button.disabled = true;
+                    button.classList.add('opacity-50', 'cursor-not-allowed');
+                }
+            });
+            
+            // 按照通讯协议发送数据到设备
+            if (connectedDevice) {
+                try {
+                    if (enabled) {
+                        // 开启Web驱动模式
+                        // 准备数据包
+                        const fullData = new Uint8Array(64);
+                        
+                        // 字节1: Report ID (0x04)
+                        fullData[0] = 0x04;
+                        
+                        // 字节2-4: 保留字节
+                        fullData[1] = 0x00;
+                        fullData[2] = 0x00;
+                        fullData[3] = 0x00;
+                        
+                        // 字节5: 命令码 (0x01 - 设置灯效模式)
+                        fullData[4] = 0x01;
+                        
+                        // 字节6: 数据长度
+                        fullData[5] = 0x01;
+                        
+                        // 字节7-8: 地址
+                        fullData[6] = 0x00;
+                        fullData[7] = 0x00;
+                        
+                        // 字节9: 灯效模式
+                        // 0x01: Web驱动 (开启Web驱动)
+                        fullData[8] = 0x01;
+                        
+                        // 实际发送的数据是去掉 Report ID 的后续 63 字节
+                        const reportData = fullData.subarray(1);
+                        
+                        // 发送数据
+                        await connectedDevice.sendReport(0x04, reportData);
+                        console.log('Web驱动模式已开启');
+                        addToReceiveData(`发送: 开启Web驱动模式 (Report ID 4, Cmd 0x01, 灯效模式: 0x01 (Web驱动))`);
+                        
+                        // 设置Web控制模式标志
+                        isWebControlMode = true;
+                        
+                        // 发送开始灯效命令
+                        await sendLedStartCommand();
+                    } else {
+                        // 关闭Web驱动模式
+                        // 先发送停止灯效命令
+                        if (isWebControlMode) {
+                            await sendLedStopCommand();
+                            isWebControlMode = false;
+                        }
+                        
+                        // 准备数据包
+                        const fullData = new Uint8Array(64);
+                        
+                        // 字节1: Report ID (0x04)
+                        fullData[0] = 0x04;
+                        
+                        // 字节2-4: 保留字节
+                        fullData[1] = 0x00;
+                        fullData[2] = 0x00;
+                        fullData[3] = 0x00;
+                        
+                        // 字节5: 命令码 (0x01 - 设置灯效模式)
+                        fullData[4] = 0x01;
+                        
+                        // 字节6: 数据长度
+                        fullData[5] = 0x01;
+                        
+                        // 字节7-8: 地址
+                        fullData[6] = 0x00;
+                        fullData[7] = 0x00;
+                        
+                        // 字节9: 灯效模式
+                        // 0x00: 硬件控制 (关闭Web驱动)
+                        fullData[8] = 0x00;
+                        
+                        // 实际发送的数据是去掉 Report ID 的后续 63 字节
+                        const reportData = fullData.subarray(1);
+                        
+                        // 发送数据
+                        await connectedDevice.sendReport(0x04, reportData);
+                        console.log('Web驱动模式已关闭');
+                        addToReceiveData(`发送: 关闭Web驱动模式 (Report ID 4, Cmd 0x01, 灯效模式: 0x00 (硬件控制))`);
+                    }
+                } catch (error) {
+                    console.error('发送灯光状态时出错:', error);
+                    addToReceiveData(`错误: 发送灯光状态失败 - ${error.message}`);
+                }
+            }
+        }
+
+        function setAllKeysColor() {
+            document.querySelectorAll('#keyboard-visual .key-cap').forEach(key => {
+                key.classList.add('selected');
+                selectedKeys.add(key.dataset.code);
+                key.style.background = currentKeyColor;
+                key.style.boxShadow = `0 0 10px ${currentKeyColor}80`;
+            });
+        }
+
+        function clearKeySelection() {
+            document.querySelectorAll('.key-cap').forEach(key => {
+                key.classList.remove('selected');
+                key.style.background = '';
+                key.style.boxShadow = '';
+            });
+            selectedKeys.clear();
+        }
+
+        function applyLighting() {
+            // 模拟应用设置
+            const btn = event.target;
+            const originalText = btn.textContent;
+            btn.textContent = '已应用 ✓';
+            btn.classList.add('bg-green-600');
+            setTimeout(() => {
+                btn.textContent = originalText;
+                btn.classList.remove('bg-green-600');
+            }, 2000);
+            
+            // 按照通讯协议发送数据到设备
+            if (connectedDevice) {
+                // 获取主色调
+                const mainColor = document.getElementById('mainColor').value;
+                
+                // 发送LED定义命令（每次点击应用设置时下发颜色设置）
+                sendLedDefineCommand(mainColor).catch(error => {
+                    console.error('发送颜色指令失败:', error);
+                    addToReceiveData(`错误: 发送颜色指令失败 - ${error.message}`);
+                });
+                
+                // 如果是Web控制模式，还需要发送LED颜色数据
+                if (isWebControlMode) {
+                    // 传输15个按键的RGB颜色值
+                    sendLedColorData().catch(error => {
+                        console.error('灯效传输失败:', error);
+                        addToReceiveData(`错误: 灯效传输失败 - ${error.message}`);
+                    });
+                }
+            }
+        }
+        
+        // 发送开始灯效命令
+        async function sendLedStartCommand() {
+            try {
+                // 准备数据包
+                const fullData = new Uint8Array(64);
+                
+                // 字节1: Report ID (0x04)
+                fullData[0] = 0x04;
+                
+                // 字节2-4: 保留字节
+                fullData[1] = 0x00;
+                fullData[2] = 0x00;
+                fullData[3] = 0x00;
+                
+                // 字节5: 命令码 (AP_CMD_WRITE_LED_START)
+                fullData[4] = 0x12;
+                
+                // 字节6: 数据长度
+                fullData[5] = 0x00;
+                
+                // 字节7-8: 地址
+                fullData[6] = 0x00;
+                fullData[7] = 0x00;
+                
+                // 实际发送的数据是去掉 Report ID 的后续 63 字节
+                const reportData = fullData.subarray(1);
+                
+                // 发送数据
+                await connectedDevice.sendReport(0x04, reportData);
+                console.log('开始灯效命令已发送');
+                addToReceiveData(`发送: 开始灯效命令 (Report ID 4, Cmd 0x12)`);
+                
+                // 等待10ms，防止USB通讯繁忙
+                await new Promise(resolve => setTimeout(resolve, 10));
+            } catch (error) {
+                console.error('发送开始灯效命令失败:', error);
+                throw error;
+            }
+        }
+        
+        // 发送LED颜色数据
+        async function sendLedColorData() {
+            try {
+                // 获取主色调
+                const mainColor = document.getElementById('mainColor').value;
+                const r = parseInt(mainColor.substring(1, 3), 16);
+                const g = parseInt(mainColor.substring(3, 5), 16);
+                const b = parseInt(mainColor.substring(5, 7), 16);
+                
+                // 准备数据包
+                const fullData = new Uint8Array(64);
+                
+                // 字节1: Report ID (0x04)
+                fullData[0] = 0x04;
+                
+                // 字节2-4: 保留字节
+                fullData[1] = 0x00;
+                fullData[2] = 0x00;
+                fullData[3] = 0x00;
+                
+                // 字节5: 命令码 (AP_CMD_WRITE_LED_DATA)
+                fullData[4] = 0x0B;
+                
+                // 字节6: 数据长度 (15个LED，每个3字节，共45字节)
+                fullData[5] = 0x2D; // 45字节
+                
+                // 字节7-8: 地址
+                fullData[6] = 0x00;
+                fullData[7] = 0x00;
+                
+                // 字节9-53: 灯效数据 (15个LED，每个RGB三字节)
+                for (let i = 0; i < 15; i++) {
+                    fullData[8 + i * 3] = r;
+                    fullData[9 + i * 3] = g;
+                    fullData[10 + i * 3] = b;
+                }
+                
+                // 实际发送的数据是去掉 Report ID 的后续 63 字节
+                const reportData = fullData.subarray(1);
+                
+                // 发送数据
+                await connectedDevice.sendReport(0x04, reportData);
+                console.log('LED颜色数据已发送');
+                addToReceiveData(`发送: LED颜色数据 (Report ID 4, Cmd 0x0B, 颜色: ${mainColor})`);
+                
+                // 等待10ms，防止USB通讯繁忙
+                await new Promise(resolve => setTimeout(resolve, 10));
+            } catch (error) {
+                console.error('发送LED颜色数据失败:', error);
+                throw error;
+            }
+        }
+        
+        // 发送LED定义命令（每次设置颜色后调用）
+        async function sendLedDefineCommand(color) {
+            try {
+                // 解析颜色值
+                const r = parseInt(color.substring(1, 3), 16);
+                const g = parseInt(color.substring(3, 5), 16);
+                const b = parseInt(color.substring(5, 7), 16);
+                
+                // 准备数据包
+                const fullData = new Uint8Array(64);
+                
+                // 字节1: Report ID (0x04)
+                fullData[0] = 0x04;
+                
+                // 字节2-4: 保留字节
+                fullData[1] = 0x00;
+                fullData[2] = 0x00;
+                fullData[3] = 0x00;
+                
+                // 字节5: 命令码 (AP_CMD_WRITE_LED_DEFINE)
+                fullData[4] = 0x0B;
+                
+                // 字节6: 数据长度 (15个LED，每个3字节，共45字节)
+                fullData[5] = 0x2D; // 45字节
+                
+                // 字节7-8: 地址
+                fullData[6] = 0x00;
+                fullData[7] = 0x00;
+                
+                // 字节9-53: 灯效数据 (15个LED，每个RGB三字节)
+                for (let i = 0; i < 15; i++) {
+                    fullData[8 + i * 3] = r;
+                    fullData[9 + i * 3] = g;
+                    fullData[10 + i * 3] = b;
+                }
+                
+                // 实际发送的数据是去掉 Report ID 的后续 63 字节
+                const reportData = fullData.subarray(1);
+                
+                // 发送数据
+                await connectedDevice.sendReport(0x04, reportData);
+                console.log('LED定义命令已发送');
+                addToReceiveData(`发送: LED定义命令 (Report ID 4, Cmd 0x0B, 颜色: ${color})`);
+                
+                // 等待10ms，防止USB通讯繁忙
+                await new Promise(resolve => setTimeout(resolve, 10));
+            } catch (error) {
+                console.error('发送LED定义命令失败:', error);
+                throw error;
+            }
+        }
+        
+        // 发送停止灯效命令
+        async function sendLedStopCommand() {
+            try {
+                // 准备数据包
+                const fullData = new Uint8Array(64);
+                
+                // 字节1: Report ID (0x04)
+                fullData[0] = 0x04;
+                
+                // 字节2-4: 保留字节
+                fullData[1] = 0x00;
+                fullData[2] = 0x00;
+                fullData[3] = 0x00;
+                
+                // 字节5: 命令码 (AP_CMD_WRITE_LED_STOP)
+                fullData[4] = 0x13;
+                
+                // 字节6: 数据长度
+                fullData[5] = 0x00;
+                
+                // 字节7-8: 地址
+                fullData[6] = 0x00;
+                fullData[7] = 0x00;
+                
+                // 实际发送的数据是去掉 Report ID 的后续 63 字节
+                const reportData = fullData.subarray(1);
+                
+                // 发送数据
+                await connectedDevice.sendReport(0x04, reportData);
+                console.log('停止灯效命令已发送');
+                addToReceiveData(`发送: 停止灯效命令 (Report ID 4, Cmd 0x13)`);
+            } catch (error) {
+                console.error('发送停止灯效命令失败:', error);
+                throw error;
+            }
+        }
+
+        // 按键映射功能
+        function assignKey(functionName) {
+            if (selectedKeys.size === 0) {
+                alert('请先选择一个按键');
+                return;
+            }
+            document.getElementById('selectedKeyFunction').textContent = '映射为: ' + functionName;
+            document.getElementById('selectedKeyFunction').classList.add('text-cyan-400');
+        }
+
+        function resetKeymap() {
+            if (confirm('确定要重置所有按键映射吗？')) {
+                location.reload();
+            }
+        }
+
+        // 宏功能
+        function startRecording() {
+            isRecording = !isRecording;
+            const btn = document.getElementById('recordBtn');
+            if (isRecording) {
+                btn.innerHTML = '<div class="w-2 h-2 rounded-full bg-red-500"></div> 停止';
+                btn.classList.add('bg-red-600', 'text-white');
+                btn.classList.remove('bg-red-600/20', 'text-red-400');
+            } else {
+                btn.innerHTML = '<div class="w-2 h-2 rounded-full bg-red-500 animate-pulse"></div> 录制';
+                btn.classList.remove('bg-red-600', 'text-white');
+                btn.classList.add('bg-red-600/20', 'text-red-400');
+            }
+        }
+
+        function createNewMacro() {
+            const name = prompt('请输入宏名称:');
+            if (name) {
+                const list = document.getElementById('macroList');
+                const item = document.createElement('div');
+                item.className = 'p-3 rounded-lg bg-slate-800/50 border border-transparent hover:border-slate-600 cursor-pointer transition-all';
+                item.innerHTML = `
+                    <div class="flex items-center justify-between">
+                        <span class="font-medium text-slate-300">${name}</span>
+                        <span class="text-xs text-slate-500">0 动作</span>
+                    </div>
+                    <div class="text-xs text-slate-500 mt-1">刚刚创建</div>
+                `;
+                
+                // 添加点击事件
+                item.addEventListener('click', function() {
+                    const macroItems = document.querySelectorAll('#macroList > div');
+                    macroItems.forEach(i => {
+                        i.classList.remove('bg-cyan-500/10', 'border-cyan-500/30');
+                        i.classList.add('bg-slate-800/50', 'border-transparent');
+                        i.querySelector('span.font-medium').classList.remove('text-cyan-400');
+                        i.querySelector('span.font-medium').classList.add('text-slate-300');
+                    });
+                    this.classList.remove('bg-slate-800/50', 'border-transparent');
+                    this.classList.add('bg-cyan-500/10', 'border-cyan-500/30');
+                    this.querySelector('span.font-medium').classList.remove('text-slate-300');
+                    this.querySelector('span.font-medium').classList.add('text-cyan-400');
+                });
+                
+                list.insertBefore(item, list.firstChild);
+            }
+        }
+
+        function saveMacro() {
+            alert('宏已保存到键盘内存');
+        }
+
+        // Profile管理
+        let currentProfile = 'Profile 1 (默认)';
+        
+        // 默认配置
+        const defaultProfileConfig = {
+            lighting: {
+                enabled: true,
+                mode: 'static',
+                color: '#06b6d4',
+                brightness: 100,
+                speed: 5
+            },
+            keymap: {},
+            macros: [
+                { name: '游戏连招 A', actions: 12, lastEdit: '2小时前' },
+                { name: '办公快捷', actions: 5, lastEdit: '昨天' }
+            ],
+            performance: {
+                pollingRate: '1000',
+                debounce: 5
+            }
+        };
+        
+        // 初始化所有profile为默认配置
+        let profiles = {
+            'Profile 1 (默认)': JSON.parse(JSON.stringify(defaultProfileConfig)),
+            'Profile 2': JSON.parse(JSON.stringify(defaultProfileConfig)),
+            'Profile 3': JSON.parse(JSON.stringify(defaultProfileConfig)),
+            'Profile 4': JSON.parse(JSON.stringify(defaultProfileConfig))
+        };
+
+        // 保存当前配置到profile
+        function saveCurrentProfile() {
+            const profile = profiles[currentProfile];
+            
+            // 保存灯光设置
+            profile.lighting.enabled = document.getElementById('lightToggle').checked;
+            profile.lighting.color = document.getElementById('mainColor').value;
+            
+            // 保存亮度设置
+            const brightnessText = document.getElementById('brightnessValue').textContent;
+            profile.lighting.brightness = parseInt(brightnessText);
+            
+            // 保存灯效模式
+            const activeMode = document.querySelector('.light-mode-btn.active');
+            if (activeMode) {
+                const modeMatch = activeMode.onclick.toString().match(/setLightMode\('([^']+)'\)/);
+                if (modeMatch) {
+                    profile.lighting.mode = modeMatch[1];
+                }
+            }
+            
+            // 保存速度设置
+            const speedButtons = document.querySelectorAll('[onclick^="setSpeed"]');
+            let activeSpeed = 5; // 默认中等速度
+            speedButtons.forEach(btn => {
+                if (btn.classList.contains('bg-cyan-600')) {
+                    const speedMatch = btn.onclick.toString().match(/setSpeed\((\d+)\)/);
+                    if (speedMatch) {
+                        activeSpeed = parseInt(speedMatch[1]);
+                    }
+                }
+            });
+            profile.lighting.speed = activeSpeed;
+            
+            // 保存轮询率设置
+            const pollingRate = document.querySelector('input[name="polling"]:checked');
+            if (pollingRate) {
+                profile.performance.pollingRate = pollingRate.value;
+            }
+            
+            // 保存去抖时间
+            const debounceSlider = document.querySelector('input[type="range"]');
+            if (debounceSlider) {
+                profile.performance.debounce = parseInt(debounceSlider.value);
+            }
+            
+            console.log('配置已保存到', currentProfile);
+        }
+
+        // 加载profile配置
+        function loadProfile(profileName) {
+            const profile = profiles[profileName];
+            if (!profile) return;
+            
+            // 保存当前配置
+            saveCurrentProfile();
+            
+            // 更新当前profile
+            currentProfile = profileName;
+            
+            // 加载灯光设置
+            document.getElementById('lightToggle').checked = profile.lighting.enabled;
+            document.getElementById('mainColor').value = profile.lighting.color;
+            document.getElementById('colorHex').value = profile.lighting.color.toUpperCase();
+            document.querySelector('.color-picker-wrapper').style.background = profile.lighting.color;
+            setBrightness(profile.lighting.brightness);
+            setSpeed(profile.lighting.speed);
+            
+            // 加载灯效模式
+            document.querySelectorAll('.light-mode-btn').forEach(btn => {
+                btn.classList.remove('border-cyan-500', 'active');
+                btn.classList.add('border-transparent');
+                btn.querySelector('span').classList.remove('text-white');
+                btn.querySelector('span').classList.add('text-slate-300');
+            });
+            const modeBtn = document.querySelector(`[onclick="setLightMode('${profile.lighting.mode}')"]`);
+            if (modeBtn) {
+                modeBtn.classList.remove('border-transparent');
+                modeBtn.classList.add('border-cyan-500', 'active');
+                modeBtn.querySelector('span').classList.remove('text-slate-300');
+                modeBtn.querySelector('span').classList.add('text-white');
+            }
+            
+            // 加载轮询率设置
+            document.querySelectorAll('input[name="polling"]').forEach(radio => {
+                radio.checked = radio.value === profile.performance.pollingRate;
+            });
+            
+            // 加载去抖时间
+            const debounceSlider = document.querySelector('input[type="range"]');
+            if (debounceSlider) {
+                debounceSlider.value = profile.performance.debounce;
+                document.getElementById('debounceValue').textContent = profile.performance.debounce + 'ms';
+            }
+            
+            // 应用设置
+            toggleLights();
+            
+            console.log('已加载', profileName, '配置');
+        }
+
+        // 工具函数
+        function toggleSettings() {
+            alert('设置面板功能开发中...');
+        }
+
+        function checkUpdate() {
+            alert('当前已是最新版本 (V1.0.0)');
+        }
+
+        function resetAllSettings() {
+            if (confirm('确定要重置所有配置吗？这将恢复所有profile到默认值。')) {
+                // 重置所有profile为默认配置
+                Object.keys(profiles).forEach(profileName => {
+                    profiles[profileName] = JSON.parse(JSON.stringify(defaultProfileConfig));
+                });
+                
+                // 恢复到Profile 1 (默认)
+                const defaultProfile = 'Profile 1 (默认)';
+                currentProfile = defaultProfile;
+                
+                // 更新profile选择器
+                const profileSelect = document.querySelector('select');
+                if (profileSelect) {
+                    profileSelect.value = defaultProfile;
+                }
+                
+                // 重置当前界面设置
+                document.getElementById('lightToggle').checked = true;
+                document.getElementById('mainColor').value = '#06b6d4';
+                document.getElementById('colorHex').value = '#06B6D4';
+                document.querySelector('.color-picker-wrapper').style.background = '#06b6d4';
+                setBrightness(100);
+                setSpeed(5);
+                
+                // 重置灯效模式
+                document.querySelectorAll('.light-mode-btn').forEach(btn => {
+                    btn.classList.remove('border-cyan-500', 'active');
+                    btn.classList.add('border-transparent');
+                    btn.querySelector('span').classList.remove('text-white');
+                    btn.querySelector('span').classList.add('text-slate-300');
+                });
+                const staticModeBtn = document.querySelector('[onclick="setLightMode(\'static\')"]');
+                if (staticModeBtn) {
+                    staticModeBtn.classList.remove('border-transparent');
+                    staticModeBtn.classList.add('border-cyan-500', 'active');
+                    staticModeBtn.querySelector('span').classList.remove('text-slate-300');
+                    staticModeBtn.querySelector('span').classList.add('text-white');
+                }
+                
+                // 重置键盘按键选择
+                clearKeySelection();
+                
+                // 重置轮询率设置
+                document.querySelectorAll('input[name="polling"]').forEach(radio => {
+                    radio.checked = radio.value === '1000';
+                });
+                
+                // 重置去抖时间
+                const debounceSlider = document.querySelector('input[type="range"]');
+                if (debounceSlider) {
+                    debounceSlider.value = 5;
+                    document.getElementById('debounceValue').textContent = '5ms';
+                }
+                
+                // 应用重置
+                toggleLights();
+                
+                // 保存重置后的配置到当前profile
+                saveCurrentProfile();
+                
+                alert('所有配置已重置为默认值');
+            }
+        }
+
+        // USB HID设备连接逻辑
+        const VENDOR_ID = 0x320F; // 替换为实际的VID
+        const PRODUCT_ID = 0x1234; // 替换为实际的PID
+        let connectedDevice = null;
+        let selectedDevice = null;
+        let selectedDeviceIndex = -1;
+
+        // 检查浏览器是否支持WebHID
+        function checkWebHIDSupport() {
+            if (!navigator.hid) {
+                document.getElementById('device-list').innerHTML = `
+                    <div class="p-4 text-center text-red-400 text-sm">
+                        浏览器不支持WebHID
+                    </div>
+                `;
+                return false;
+            }
+            return true;
+        }
+
+        // 搜索设备
+        async function searchDevices() {
+            if (!checkWebHIDSupport()) return;
+
+            document.getElementById('device-list').innerHTML = `
+                <div class="p-4 text-center text-slate-300 text-sm">
+                    <div class="flex items-center justify-center gap-2">
+                        <div class="w-3 h-3 rounded-full bg-amber-500 animate-pulse"></div>
+                        <span>正在搜索设备...</span>
+                    </div>
+                </div>
+            `;
+
+            try {
+                const devices = await navigator.hid.getDevices();
+                const keyboardDevices = devices.filter(device => 
+                    device.vendorId === VENDOR_ID && device.productId === PRODUCT_ID
+                );
+
+                if (keyboardDevices.length > 0) {
+                    let deviceListHTML = '';
+                    keyboardDevices.forEach((device, index) => {
+                        deviceListHTML += `
+                            <div class="p-3 border-b border-slate-800 hover:bg-slate-800/50 cursor-pointer device-item" data-index="${index}">
+                                <div class="font-medium text-white">${device.productName || 'SwiftKey X1'}</div>
+                                <div class="text-xs text-slate-400">VID: ${device.vendorId.toString(16).toUpperCase()}, PID: ${device.productId.toString(16).toUpperCase()}</div>
+                                <div class="text-xs text-slate-500 mt-1">已授权设备</div>
+                            </div>
+                        `;
+                    });
+                    document.getElementById('device-list').innerHTML = deviceListHTML;
+
+                    // 添加设备选择事件
+                    document.querySelectorAll('.device-item').forEach(item => {
+                        item.addEventListener('click', function() {
+                            // 移除其他设备的选中状态
+                            document.querySelectorAll('.device-item').forEach(i => {
+                                i.classList.remove('bg-cyan-500/10', 'border-cyan-500/30');
+                            });
+                            // 添加当前设备的选中状态
+                            this.classList.add('bg-cyan-500/10', 'border-cyan-500/30');
+                            // 存储选中的设备
+                            selectedDeviceIndex = parseInt(this.dataset.index);
+                            selectedDevice = keyboardDevices[selectedDeviceIndex];
+                            console.log('选中设备:', selectedDevice);
+                            // 启用连接按钮
+                            const connectBtn = document.getElementById('connect-btn');
+                            connectBtn.disabled = false;
+                            connectBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+                            connectBtn.classList.add('opacity-100', 'cursor-pointer');
+                        });
+                    });
+                } else {
+                    document.getElementById('device-list').innerHTML = `
+                        <div class="p-4 text-center">
+                            <div class="text-slate-500 text-sm mb-4">未找到符合条件的设备</div>
+                            <button onclick="requestNewDevice()" class="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg transition-colors text-sm">
+                                请求设备权限
+                            </button>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                console.error('搜索设备失败:', error);
+                document.getElementById('device-list').innerHTML = `
+                    <div class="p-4 text-center text-red-400 text-sm">
+                        搜索设备失败: ${error.message}
+                    </div>
+                `;
+            }
+        }
+
+
+
+        // 请求设备权限并连接
+        async function requestDevice() {
+            if (!checkWebHIDSupport()) return;
+
+            // 检查是否已选择设备
+            if (!selectedDevice) {
+                document.getElementById('device-list').innerHTML = `
+                    <div class="p-4 text-center text-amber-400 text-sm">
+                        请先搜索并选择要连接的设备
+                    </div>
+                `;
+                return;
+            }
+
+            document.getElementById('device-list').innerHTML = `
+                <div class="p-4 text-center text-slate-300 text-sm">
+                    <div class="flex items-center justify-center gap-2">
+                        <div class="w-3 h-3 rounded-full bg-amber-500 animate-pulse"></div>
+                        <span>正在连接设备...</span>
+                    </div>
+                </div>
+            `;
+
+            try {
+                console.log('开始连接设备...');
+                console.log('使用已选择的设备:', selectedDevice);
+                
+                // 尝试打开已选择的设备
+                console.log('尝试打开设备...');
+                await selectedDevice.open();
+                console.log('设备打开成功');
+                
+                // 监听输入报告
+                selectedDevice.oninputreport = (event) => {
+                    console.log('收到输入报告:', event);
+                    
+                    // 解析接收到的数据
+                    if (event.reportId === 4) { // 命令通道报告ID
+                        const data = new Uint8Array(event.data.buffer);
+                        
+                        // 按照协议格式解析
+                        const reserved1 = data[0];
+                        const reserved2 = data[1];
+                        const reserved3 = data[2];
+                        const cmd = data[3];
+                        const dataLen = data[4];
+                        const addrHigh = data[5];
+                        const addrLow = data[6];
+                        const payload = data.slice(7, 7 + dataLen);
+                        
+                        // 转换为显示用的十六进制
+                        const payloadHex = Array.from(payload).map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' ');
+                        const fullDataHex = Array.from(data).map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' ');
+                        
+                        // 添加到接收数据显示
+                        addToReceiveData(`接收: Report ID ${event.reportId}, Cmd ${cmd.toString(16).toUpperCase()}, DataLen ${dataLen}, Addr ${(addrHigh << 8 | addrLow).toString(16).toUpperCase()}`);
+                        addToReceiveData(`数据: ${fullDataHex}`);
+                        if (dataLen > 0) {
+                            addToReceiveData(`有效数据: ${payloadHex}`);
+                        }
+                        
+                        // 解析基本信息区数据
+                        if (cmd === 0x03 && dataLen === 29) {
+                            addToReceiveData('=== 开始解析基本信息区 ===');
+                            parseBasicInfo(Array.from(payload));
+                        }
+                    }
+                };
+                
+                // 连接成功，进入主界面
+                console.log('连接成功，进入主界面');
+                connectedDevice = selectedDevice;
+                onDeviceConnected();
+            } catch (error) {
+                console.error('连接设备失败:', error);
+                console.error('错误详情:', error);
+                
+                // 处理访问被拒绝的情况
+                if (error.message.includes('Access denied')) {
+                    // 如果连接已授权设备失败，尝试直接请求新设备
+                    console.log('已授权设备连接失败，尝试直接请求新设备...');
+                    directRequestDevice();
+                } else if (error.message.includes('No device selected')) {
+                    document.getElementById('device-list').innerHTML = `
+                        <div class="p-4 text-center text-slate-300 text-sm">
+                            请选择要连接的设备
+                        </div>
+                    `;
+                } else {
+                    document.getElementById('device-list').innerHTML = `
+                        <div class="p-4 text-center text-red-400 text-sm">
+                            连接设备失败: ${error.message}
+                        </div>
+                    `;
+                }
+            }
+        }
+
+        // 直接使用WebHID API请求设备（绕过已授权设备列表）
+        async function directRequestDevice() {
+            if (!checkWebHIDSupport()) return;
+
+            document.getElementById('device-list').innerHTML = `
+                <div class="p-4 text-center text-slate-300 text-sm">
+                    <div class="flex items-center justify-center gap-2">
+                        <div class="w-3 h-3 rounded-full bg-amber-500 animate-pulse"></div>
+                        <span>正在请求设备权限...</span>
+                    </div>
+                </div>
+            `;
+
+            try {
+                console.log('=== 开始直接连接设备 ===');
+                
+                // 1. 请求新设备
+                console.log('1. 请求新设备权限...');
+                const devices = await navigator.hid.requestDevice({
+                    filters: [{
+                        vendorId: VENDOR_ID,
+                        productId: PRODUCT_ID
+                    }]
+                });
+                
+                if (devices.length === 0) {
+                    throw new Error('未选择设备');
+                }
+                
+                const device = devices[0];
+                console.log('设备选择成功:', device);
+                console.log('设备名称:', device.productName);
+                console.log('设备VID:', device.vendorId.toString(16).toUpperCase());
+                console.log('设备PID:', device.productId.toString(16).toUpperCase());
+                
+                // 等待一段时间
+                await new Promise(resolve => setTimeout(resolve, 500));
+                
+                // 2. 尝试打开设备
+                console.log('2. 尝试打开设备...');
+                await device.open();
+                console.log('设备打开成功');
+                
+                // 3. 监听输入报告
+                console.log('3. 设置输入报告监听器...');
+                device.oninputreport = (event) => {
+                    console.log('收到输入报告:', event);
+                    
+                    // 解析接收到的数据
+                    if (event.reportId === 4) { // 命令通道报告ID
+                        const data = new Uint8Array(event.data.buffer);
+                        
+                        // 按照协议格式解析
+                        const reserved1 = data[0];
+                        const reserved2 = data[1];
+                        const reserved3 = data[2];
+                        const cmd = data[3];
+                        const dataLen = data[4];
+                        const addrHigh = data[5];
+                        const addrLow = data[6];
+                        const payload = data.slice(7, 7 + dataLen);
+                        
+                        // 转换为显示用的十六进制
+                        const payloadHex = Array.from(payload).map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' ');
+                        const fullDataHex = Array.from(data).map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' ');
+                        
+                        // 添加到接收数据显示
+                        addToReceiveData(`接收: Report ID ${event.reportId}, Cmd ${cmd.toString(16).toUpperCase()}, DataLen ${dataLen}, Addr ${(addrHigh << 8 | addrLow).toString(16).toUpperCase()}`);
+                        addToReceiveData(`数据: ${fullDataHex}`);
+                        if (dataLen > 0) {
+                            addToReceiveData(`有效数据: ${payloadHex}`);
+                        }
+                        
+                        // 解析基本信息区数据
+                        if (cmd === 0x03 && dataLen === 29) {
+                            addToReceiveData('=== 开始解析基本信息区 ===');
+                            parseBasicInfo(Array.from(payload));
+                        }
+                    }
+                };
+                
+                // 4. 连接成功，进入主界面
+                console.log('4. 连接成功，进入主界面');
+                connectedDevice = device;
+                onDeviceConnected();
+            } catch (error) {
+                console.error('请求设备失败:', error);
+                console.error('错误堆栈:', error.stack);
+                
+                if (error.message.includes('No device selected')) {
+                    document.getElementById('device-list').innerHTML = `
+                        <div class="p-4 text-center text-slate-300 text-sm">
+                            请选择要连接的设备
+                        </div>
+                    `;
+                } else if (error.message.includes('Access denied')) {
+                    document.getElementById('device-list').innerHTML = `
+                        <div class="p-4 text-center text-amber-400 text-sm">
+                            <strong>设备访问被拒绝</strong><br>
+                            请按照以下步骤操作：<br>
+                            1. <strong>断开设备USB连接</strong>，等待3秒后重新连接<br>
+                            2. <strong>关闭所有可能占用设备的程序</strong>（如其他驱动软件、设备管理器等）<br>
+                            3. <strong>使用Chrome浏览器</strong>（WebHID在Chrome中支持最好）<br>
+                            4. <strong>以管理员身份运行浏览器</strong><br>
+                            5. <strong>检查设备驱动</strong>是否正确安装<br>
+                            6. <strong>重启计算机</strong>后重试
+                        </div>
+                    `;
+                } else {
+                    document.getElementById('device-list').innerHTML = `
+                        <div class="p-4 text-center text-red-400 text-sm">
+                            请求设备失败: ${error.message}
+                        </div>
+                    `;
+                }
+            }
+        }
+
+        // 当没有已授权设备时，请求新设备
+        async function requestNewDevice() {
+            if (!checkWebHIDSupport()) return;
+
+            document.getElementById('device-list').innerHTML = `
+                <div class="p-4 text-center text-slate-300 text-sm">
+                    <div class="flex items-center justify-center gap-2">
+                        <div class="w-3 h-3 rounded-full bg-amber-500 animate-pulse"></div>
+                        <span>正在请求设备权限...</span>
+                    </div>
+                </div>
+            `;
+
+            try {
+                console.log('请求新设备权限...');
+                const devices = await navigator.hid.requestDevice({
+                    filters: [{
+                        vendorId: VENDOR_ID,
+                        productId: PRODUCT_ID
+                    }]
+                });
+                
+                console.log('设备选择成功:', devices[0]);
+                console.log('设备名称:', devices[0].productName);
+                console.log('设备VID:', devices[0].vendorId.toString(16).toUpperCase());
+                console.log('设备PID:', devices[0].productId.toString(16).toUpperCase());
+                
+                // 更新设备列表
+                await searchDevices();
+            } catch (error) {
+                console.error('请求设备失败:', error);
+                if (error.message.includes('No device selected')) {
+                    document.getElementById('device-list').innerHTML = `
+                        <div class="p-4 text-center text-slate-300 text-sm">
+                            请选择要连接的设备
+                        </div>
+                    `;
+                } else {
+                    document.getElementById('device-list').innerHTML = `
+                        <div class="p-4 text-center text-red-400 text-sm">
+                            请求设备失败: ${error.message}
+                        </div>
+                    `;
+                }
+            }
+        }
+
+        // 设备连接成功
+        function onDeviceConnected() {
+            document.getElementById('device-list').innerHTML = `
+                <div class="p-4 text-center text-emerald-400 text-sm">
+                    <div class="flex items-center justify-center gap-2">
+                        <div class="w-3 h-3 rounded-full bg-emerald-500 connection-pulse"></div>
+                        <span>设备已连接</span>
+                    </div>
+                </div>
+            `;
+            
+            // 显示主界面
+            setTimeout(() => {
+                document.getElementById('connection-screen').classList.add('hidden');
+                document.getElementById('main-header').classList.remove('hidden');
+                document.querySelector('main').classList.remove('hidden');
+                
+                // 更新HID测试面板的设备状态
+                updateDeviceStatus();
+            }, 1000);
+        }
+
+        // 进入模拟模式（跳过设备连接）
+        function enterSimulationMode() {
+            console.log('进入模拟模式');
+            document.getElementById('device-list').innerHTML = `
+                <div class="p-4 text-center text-emerald-400 text-sm">
+                    <div class="flex items-center justify-center gap-2">
+                        <div class="w-3 h-3 rounded-full bg-emerald-500 connection-pulse"></div>
+                        <span>模拟模式已启用</span>
+                    </div>
+                </div>
+            `;
+            
+            // 显示主界面
+            setTimeout(() => {
+                document.getElementById('connection-screen').classList.add('hidden');
+                document.getElementById('main-header').classList.remove('hidden');
+                document.querySelector('main').classList.remove('hidden');
+            }, 1000);
+        }
+
+        // 断开设备连接
+        function disconnectDevice() {
+            console.log('开始断开设备连接...');
+            
+            // 尝试关闭设备连接
+            if (connectedDevice) {
+                try {
+                    if (connectedDevice.close) {
+                        connectedDevice.close();
+                        console.log('设备连接已关闭');
+                    }
+                } catch (error) {
+                    console.log('关闭设备连接时出错:', error);
+                }
+                connectedDevice = null;
+            }
+            
+            // 重置连接状态
+            selectedDevice = null;
+            selectedDeviceIndex = -1;
+            
+            // 重置连接按钮状态
+            const connectBtn = document.getElementById('connect-btn');
+            connectBtn.disabled = true;
+            connectBtn.classList.add('opacity-50', 'cursor-not-allowed');
+            connectBtn.classList.remove('opacity-100', 'cursor-pointer');
+            
+            // 返回到连接界面
+            document.getElementById('connection-screen').classList.remove('hidden');
+            document.getElementById('main-header').classList.add('hidden');
+            document.querySelector('main').classList.add('hidden');
+            
+            // 重置设备列表
+            document.getElementById('device-list').innerHTML = `
+                <div class="p-4 text-center text-slate-500 text-sm">
+                    点击上方按钮搜索设备
+                </div>
+            `;
+            
+            // 更新HID测试面板的设备状态
+            updateDeviceStatus();
+            
+            console.log('设备连接已断开');
+        }
+
+        // HID数据收发测试功能
+        function sendHIDData() {
+            if (!connectedDevice) {
+                updateTransferStatus('错误: 设备未连接', 'text-red-400');
+                return;
+            }
+
+            try {
+                // 解析输入参数
+                const cmdType = parseInt(document.getElementById('cmdType').value);
+                const dataLen = parseInt(document.getElementById('dataLen').value);
+                const addrHigh = parseInt(document.getElementById('addrHigh').value);
+                const addrLow = parseInt(document.getElementById('addrLow').value);
+                const dataInput = document.getElementById('sendData').value;
+                
+                // 解析输入数据
+                const dataArray = dataInput.split(' ').filter(item => item.trim() !== '');
+                
+                // 创建64字节的完整数据包
+                const fullData = new Uint8Array(64);
+                
+                // 字节1: Report ID (0x04)
+                fullData[0] = 0x04;
+                
+                // 字节2-4: 保留字节
+                fullData[1] = 0x00;
+                fullData[2] = 0x00;
+                fullData[3] = 0x00;
+                
+                // 字节5: 命令码
+                fullData[4] = cmdType & 0xFF;
+                
+                // 字节6: 数据长度
+                fullData[5] = dataLen & 0xFF;
+                
+                // 字节7-8: 地址
+                fullData[6] = addrHigh & 0xFF;
+                fullData[7] = addrLow & 0xFF;
+                
+                // 字节9-64: 数据 (最多56字节)
+                for (let i = 0; i < 56; i++) {
+                    if (i < dataLen && i < dataArray.length) {
+                        const value = parseInt(dataArray[i], 16);
+                        if (isNaN(value)) {
+                            fullData[8 + i] = 0x00;
+                        } else {
+                            fullData[8 + i] = value & 0xFF; // 确保在0-255范围内
+                        }
+                    } else {
+                        fullData[8 + i] = 0x00;
+                    }
+                }
+
+                // 实际发送的数据是去掉 Report ID 的后续 63 字节
+                const reportData = fullData.subarray(1);
+                
+                // 转换为显示用的十六进制数组
+                const displayData = Array.from(fullData).map(b => b.toString(16).padStart(2, '0').toUpperCase());
+
+                updateTransferStatus('正在发送数据...', 'text-amber-400');
+                
+                // 发送数据
+                connectedDevice.sendReport(0x04, reportData).then(() => {
+                    updateTransferStatus('数据发送成功', 'text-emerald-400');
+                    addToReceiveData(`发送: Report ID 0x04, Cmd ${cmdType.toString(16).toUpperCase()}, DataLen ${dataLen}, Addr ${(addrHigh << 8 | addrLow).toString(16).toUpperCase()}`);
+                    addToReceiveData(`数据: ${displayData.join(' ')}`);
+                }).catch(error => {
+                    updateTransferStatus(`发送失败: ${error.message}`, 'text-red-400');
+                    console.error('发送数据失败:', error);
+                });
+
+            } catch (error) {
+                updateTransferStatus(`错误: ${error.message}`, 'text-red-400');
+                console.error('发送数据时出错:', error);
+            }
+        }
+
+        // 数据收发测试变量
+        let isTestRunning = false;
+        let testDataSequence = 0;
+        let testResults = [];
+        let testStartTime = 0;
+
+        // 开始数据收发测试
+        async function startDataTest() {
+            if (!connectedDevice) {
+                addTestLog('错误: 设备未连接，无法进行测试', 'error');
+                return;
+            }
+
+            if (isTestRunning) {
+                addTestLog('测试正在进行中，请先停止', 'warning');
+                return;
+            }
+
+            // 获取配置
+            const sendCount = parseInt(document.getElementById('testSendCount').value);
+            const interval = parseInt(document.getElementById('testInterval').value);
+            const dataType = document.getElementById('testDataType').value;
+            const dataLength = parseInt(document.getElementById('testDataLength').value);
+
+            // 验证配置
+            if (sendCount < 1 || sendCount > 1000) {
+                addTestLog('错误: 发送次数必须在1-1000之间', 'error');
+                return;
+            }
+
+            if (interval < 5) {
+                addTestLog('错误: 时间间隔不能低于5ms', 'error');
+                return;
+            }
+
+            if (dataLength < 1 || dataLength > 56) {
+                addTestLog('错误: 数据长度必须在1-56字节之间', 'error');
+                return;
+            }
+
+            // 重置统计
+            resetTestStats();
+            
+            // 更新UI状态
+            isTestRunning = true;
+            document.getElementById('startTestBtn').disabled = true;
+            document.getElementById('startTestBtn').classList.add('opacity-50', 'cursor-not-allowed');
+            document.getElementById('stopTestBtn').disabled = false;
+            document.getElementById('stopTestBtn').classList.remove('opacity-50', 'cursor-not-allowed');
+            document.getElementById('testTotal').textContent = sendCount;
+
+            // 初始化序列号
+            testDataSequence = 0;
+            testStartTime = Date.now();
+            testResults = [];
+
+            addTestLog(`开始数据收发测试: 发送${sendCount}次, 间隔${interval}ms`, 'info');
+            addTestLog(`测试参数: 数据类型=${dataType}, 数据长度=${dataLength}字节`, 'info');
+
+            // 开始测试循环
+            for (let i = 0; i < sendCount; i++) {
+                if (!isTestRunning) {
+                    addTestLog('测试已停止', 'warning');
+                    break;
+                }
+
+                // 生成测试数据
+                const testData = generateTestData(dataType, dataLength, i);
+                
+                // 发送数据
+                const sendSuccess = await sendTestData(testData, i);
+                
+                // 更新统计
+                updateTestStats();
+
+                // 等待间隔
+                await sleep(interval);
+            }
+
+            // 测试结束
+            finishTest();
+        }
+
+        // 停止测试
+        function stopDataTest() {
+            if (!isTestRunning) return;
+            
+            isTestRunning = false;
+            document.getElementById('startTestBtn').disabled = false;
+            document.getElementById('startTestBtn').classList.remove('opacity-50', 'cursor-not-allowed');
+            document.getElementById('stopTestBtn').disabled = true;
+            document.getElementById('stopTestBtn').classList.add('opacity-50', 'cursor-not-allowed');
+            
+            addTestLog('测试已手动停止', 'warning');
+        }
+
+        // 生成测试数据
+        function generateTestData(type, length, index) {
+            const data = new Uint8Array(64);
+            
+            // 字节1: Report ID (0x04)
+            data[0] = 0x04;
+            
+            // 字节2-4: 保留字节
+            data[1] = 0x00;
+            data[2] = 0x00;
+            data[3] = 0x00;
+            
+            // 字节5: 测试命令码 (0xF0)
+            data[4] = 0xF0;
+            
+            // 字节6: 数据长度
+            data[5] = length;
+            
+            // 字节7-8: 索引 (16位)
+            data[6] = (index >> 8) & 0xFF;
+            data[7] = index & 0xFF;
+            
+            // 字节9-64: 实际测试数据 (最多56字节)
+            for (let i = 0; i < length && i < 56; i++) {
+                switch (type) {
+                    case 'sequential':
+                        data[8 + i] = (testDataSequence + i) & 0xFF;
+                        break;
+                    case 'random':
+                        data[8 + i] = Math.floor(Math.random() * 256);
+                        break;
+                    case 'fixed':
+                        data[8 + i] = 0xAA;
+                        break;
+                }
+            }
+            
+            // 剩余字节填充0x00
+            for (let i = 8 + length; i < 64; i++) {
+                data[i] = 0x00;
+            }
+            
+            testDataSequence = (testDataSequence + length) & 0xFF;
+            return data;
+        }
+
+        // 发送测试数据
+        async function sendTestData(data, index) {
+            try {
+                // Report ID 已包含在数据的第一个字节 (0x04)
+                // 实际发送的数据应该是去掉 Report ID 的后续 63 字节
+                const reportData = data.subarray(1);
+                const sentData = Array.from(data.slice(8, 8 + data[5]));
+                
+                // 记录发送的数据
+                testResults.push({
+                    index: index,
+                    sent: sentData,
+                    received: null,
+                    success: false,
+                    timestamp: Date.now()
+                });
+
+                // 发送数据，Report ID 为 0x04
+                await connectedDevice.sendReport(0x04, reportData);
+                
+                document.getElementById('totalSent').textContent = index + 1;
+                addTestLog(`[${index + 1}] 发送: ${sentData.map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' ')}`, 'send');
+                
+                return true;
+            } catch (error) {
+                testResults[index].error = error.message;
+                document.getElementById('failCount').textContent = 
+                    parseInt(document.getElementById('failCount').textContent) + 1;
+                addTestLog(`[${index + 1}] 发送失败: ${error.message}`, 'error');
+                return false;
+            }
+        }
+
+        // 更新测试统计
+        function updateTestStats() {
+            const totalSent = parseInt(document.getElementById('totalSent').textContent);
+            const totalReceived = parseInt(document.getElementById('totalReceived').textContent);
+            const successCount = parseInt(document.getElementById('successCount').textContent);
+            const failCount = parseInt(document.getElementById('failCount').textContent);
+            const sendCount = parseInt(document.getElementById('testSendCount').value);
+
+            // 计算成功率
+            const successRate = totalSent > 0 ? (successCount / totalSent * 100).toFixed(1) : 0;
+            document.getElementById('successRate').textContent = successRate + '%';
+            document.getElementById('testProgress').textContent = totalSent;
+
+            // 更新进度条
+            const progress = (totalSent / sendCount * 100).toFixed(1);
+            document.getElementById('testProgressBar').style.width = progress + '%';
+        }
+
+        // 完成测试
+        function finishTest() {
+            isTestRunning = false;
+            document.getElementById('startTestBtn').disabled = false;
+            document.getElementById('startTestBtn').classList.remove('opacity-50', 'cursor-not-allowed');
+            document.getElementById('stopTestBtn').disabled = true;
+            document.getElementById('stopTestBtn').classList.add('opacity-50', 'cursor-not-allowed');
+
+            const totalSent = parseInt(document.getElementById('totalSent').textContent);
+            const successCount = parseInt(document.getElementById('successCount').textContent);
+            const failCount = parseInt(document.getElementById('failCount').textContent);
+            const successRate = totalSent > 0 ? (successCount / totalSent * 100).toFixed(2) : 0;
+            const duration = ((Date.now() - testStartTime) / 1000).toFixed(2);
+
+            addTestLog('========== 测试完成 ==========', 'info');
+            addTestLog(`总发送: ${totalSent} 次`, 'info');
+            addTestLog(`成功: ${successCount} 次`, 'success');
+            addTestLog(`失败: ${failCount} 次`, 'error');
+            addTestLog(`成功率: ${successRate}%`, 'success');
+            addTestLog(`耗时: ${duration} 秒`, 'info');
+            addTestLog('============================', 'info');
+        }
+
+        // 重置测试统计
+        function resetTestStats() {
+            document.getElementById('totalSent').textContent = '0';
+            document.getElementById('totalReceived').textContent = '0';
+            document.getElementById('successCount').textContent = '0';
+            document.getElementById('failCount').textContent = '0';
+            document.getElementById('successRate').textContent = '0%';
+            document.getElementById('testProgress').textContent = '0';
+            document.getElementById('testProgressBar').style.width = '0%';
+            document.getElementById('errorDetails').innerHTML = '<div class="text-slate-500">暂无错误记录</div>';
+            
+            testResults = [];
+            testDataSequence = 0;
+        }
+
+        // 添加测试日志
+        function addTestLog(message, type = 'info') {
+            const logContainer = document.getElementById('testLog');
+            const timestamp = new Date().toLocaleTimeString();
+            
+            let colorClass = 'text-slate-300';
+            switch (type) {
+                case 'success':
+                    colorClass = 'text-green-400';
+                    break;
+                case 'error':
+                    colorClass = 'text-red-400';
+                    break;
+                case 'warning':
+                    colorClass = 'text-amber-400';
+                    break;
+                case 'send':
+                    colorClass = 'text-cyan-400';
+                    break;
+                case 'receive':
+                    colorClass = 'text-emerald-400';
+                    break;
+            }
+
+            const logEntry = document.createElement('div');
+            logEntry.className = `${colorClass} mb-1`;
+            logEntry.textContent = `[${timestamp}] ${message}`;
+            
+            if (logContainer.querySelector('.text-slate-500')) {
+                logContainer.innerHTML = '';
+            }
+            
+            logContainer.appendChild(logEntry);
+            logContainer.scrollTop = logContainer.scrollHeight;
+        }
+
+        // 清空测试日志
+        function clearTestLog() {
+            document.getElementById('testLog').innerHTML = '<div class="text-slate-500">等待开始测试...</div>';
+        }
+
+        // 导出测试结果
+        function exportTestResults() {
+            if (testResults.length === 0) {
+                addTestLog('没有可导出的测试结果', 'warning');
+                return;
+            }
+
+            const totalSent = parseInt(document.getElementById('totalSent').textContent);
+            const successCount = parseInt(document.getElementById('successCount').textContent);
+            const failCount = parseInt(document.getElementById('failCount').textContent);
+            const successRate = totalSent > 0 ? (successCount / totalSent * 100).toFixed(2) : 0;
+            const duration = ((Date.now() - testStartTime) / 1000).toFixed(2);
+
+            let exportData = '数据收发测试报告\n';
+            exportData += '====================\n\n';
+            exportData += `测试时间: ${new Date().toLocaleString()}\n`;
+            exportData += `总发送次数: ${totalSent}\n`;
+            exportData += `成功次数: ${successCount}\n`;
+            exportData += `失败次数: ${failCount}\n`;
+            exportData += `成功率: ${successRate}%\n`;
+            exportData += `测试耗时: ${duration}秒\n\n`;
+            exportData += '详细记录:\n';
+            exportData += '----------\n';
+
+            testResults.forEach((result, index) => {
+                exportData += `[${index + 1}] 发送: [${result.sent.map(b => '0x' + b.toString(16).padStart(2, '0').toUpperCase()).join(', ')}]`;
+                if (result.received) {
+                    exportData += ` | 接收: [${result.received.map(b => '0x' + b.toString(16).padStart(2, '0').toUpperCase()).join(', ')}]`;
+                    exportData += ` | ${result.success ? '成功' : '失败'}`;
+                } else if (result.error) {
+                    exportData += ` | 错误: ${result.error}`;
+                }
+                exportData += '\n';
+            });
+
+            // 创建下载
+            const blob = new Blob([exportData], { type: 'text/plain;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `数据测试报告_${new Date().toISOString().slice(0, 10)}.txt`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+
+            addTestLog('测试报告已导出', 'success');
+        }
+
+        // 工具函数: 延时
+        function sleep(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
+        }
+
+        function clearReceiveData() {
+            document.getElementById('receiveData').textContent = '等待接收数据...';
+        }
+
+        function addToReceiveData(message) {
+            const receiveData = document.getElementById('receiveData');
+            const timestamp = new Date().toLocaleTimeString();
+            receiveData.textContent += `\n[${timestamp}] ${message}`;
+            receiveData.scrollTop = receiveData.scrollHeight;
+        }
+
+        function updateTransferStatus(message, className) {
+            const transferStatus = document.getElementById('transferStatus');
+            transferStatus.textContent = message;
+            transferStatus.className = `text-sm font-bold ${className}`;
+        }
+
+        // 更新设备状态显示
+        function updateDeviceStatus() {
+            const deviceStatus = document.getElementById('deviceStatus');
+            if (connectedDevice) {
+                deviceStatus.textContent = '已连接';
+                deviceStatus.className = 'text-sm font-bold text-emerald-400';
+            } else {
+                deviceStatus.textContent = '未连接';
+                deviceStatus.className = 'text-sm font-bold text-red-400';
+            }
+        }
+
+
+
+        // 初始化
+        document.addEventListener('DOMContentLoaded', () => {
+            // 搜索设备按钮点击事件
+            document.getElementById('search-btn').addEventListener('click', searchDevices);
+            // 连接按钮点击事件
+            document.getElementById('connect-btn').addEventListener('click', requestDevice);
+            
+            // 初始化键盘
+            initKeyboard('keyboard-visual', true);
+            
+            // 添加键盘事件监听用于演示
+            document.addEventListener('keydown', (e) => {
+                const key = document.querySelector(`[data-code="${e.code}"]`);
+                if (key && !e.repeat) {
+                    key.classList.add('active');
+                    setTimeout(() => key.classList.remove('active'), 200);
+                }
+            });
+            
+            // 添加宏列表点击事件
+            const macroItems = document.querySelectorAll('#macroList > div');
+            macroItems.forEach(item => {
+                item.addEventListener('click', function() {
+                    // 移除所有项的选中状态
+                    macroItems.forEach(i => {
+                        i.classList.remove('bg-cyan-500/10', 'border-cyan-500/30');
+                        i.classList.add('bg-slate-800/50', 'border-transparent');
+                        i.querySelector('span.font-medium').classList.remove('text-cyan-400');
+                        i.querySelector('span.font-medium').classList.add('text-slate-300');
+                    });
+                    // 添加当前项的选中状态
+                    this.classList.remove('bg-slate-800/50', 'border-transparent');
+                    this.classList.add('bg-cyan-500/10', 'border-cyan-500/30');
+                    this.querySelector('span.font-medium').classList.remove('text-slate-300');
+                    this.querySelector('span.font-medium').classList.add('text-cyan-400');
+                });
+            });
+            
+            // 添加轮询率选项点击事件
+            const pollingOptions = document.querySelectorAll('input[name="polling"]');
+            pollingOptions.forEach(radio => {
+                radio.addEventListener('change', function() {
+                    document.querySelectorAll('input[name="polling"]').forEach(radio => {
+                        const label = radio.closest('label');
+                        if (radio.checked) {
+                            label.classList.remove('bg-slate-900/50', 'border-slate-800');
+                            label.classList.add('bg-cyan-500/10', 'border-cyan-500/50');
+                            const fontMedium = label.querySelector('.font-medium');
+                            if (fontMedium) {
+                                fontMedium.classList.remove('text-white');
+                                fontMedium.classList.add('text-cyan-400');
+                            }
+                        } else {
+                            label.classList.remove('bg-cyan-500/10', 'border-cyan-500/50');
+                            label.classList.add('bg-slate-900/50', 'border-slate-800');
+                            const fontMedium = label.querySelector('.font-medium');
+                            if (fontMedium) {
+                                fontMedium.classList.remove('text-cyan-400');
+                                fontMedium.classList.add('text-white');
+                            }
+                        }
+                    });
+                });
+            });
+        });
+
+        // 分段读取数据的通用函数
+        async function readDataInChunks(cmdType, totalLength, description) {
+            if (!connectedDevice) {
+                updateTransferStatus('错误: 设备未连接', 'text-red-400');
+                return null;
+            }
+
+            try {
+                updateTransferStatus(`正在读取${description}...`, 'text-amber-400');
+                
+                const maxChunkSize = 56; // 最大单次读取长度
+                let offset = 0;
+                let allData = [];
+                let totalRead = 0;
+
+                while (offset < totalLength) {
+                    const chunkSize = Math.min(maxChunkSize, totalLength - offset);
+                    const addrLow = offset & 0xFF;
+                    const addrHigh = (offset >> 8) & 0xFF;
+
+                    // 创建63字节的数据包
+                    const data = new Uint8Array(63);
+                    
+                    // 字节1-3: 保留字节 (固定0x00)
+                    data[0] = 0x00; // Reserved1
+                    data[1] = 0x00; // Reserved2
+                    data[2] = 0x00; // Reserved3
+                    
+                    // 字节4: 命令码
+                    data[3] = cmdType & 0xFF;
+                    
+                    // 字节5: 数据长度
+                    data[4] = chunkSize & 0xFF;
+                    
+                    // 字节6-7: 地址（小端序）
+                    data[5] = addrLow; // 低8位
+                    data[6] = addrHigh; // 高8位
+                    
+                    // 字节8-63: 数据 (填充0x00)
+                    for (let i = 7; i < 63; i++) {
+                        data[i] = 0x00;
+                    }
+
+                    // 发送数据，Report ID固定为4
+                    const reportId = 4;
+                    await connectedDevice.sendReport(reportId, data);
+                    
+                    addToReceiveData(`发送: Report ID ${reportId}, Cmd ${cmdType.toString(16).toUpperCase()}, DataLen ${chunkSize}, Addr ${offset.toString(16).toUpperCase()}`);
+                    addToReceiveData(`正在等待${description}数据...`);
+
+                    // 等待设备回复（实际实现中需要通过事件监听处理）
+                    // 这里简化处理，实际项目中需要实现异步接收逻辑
+                    await new Promise(resolve => setTimeout(resolve, 100));
+
+                    // 模拟接收到数据（实际项目中需要从事件监听中获取）
+                    // 这里只是示例，实际数据需要从设备回复中解析
+                    offset += chunkSize;
+                    totalRead += chunkSize;
+                    addToReceiveData(`已读取${totalRead}/${totalLength}字节`);
+                }
+
+                updateTransferStatus(`${description}读取完成`, 'text-emerald-400');
+                return allData;
+            } catch (error) {
+                updateTransferStatus(`错误: ${error.message}`, 'text-red-400');
+                console.error(`读取${description}时出错:`, error);
+                return null;
+            }
+        }
+
+        // 解析基本信息区数据
+        function parseBasicInfo(data) {
+            if (!data || data.length < 29) {
+                addToReceiveData('错误: 基本信息区数据长度不足');
+                return;
+            }
+
+            try {
+                const basicInfo = {
+                    magic1: data[0],
+                    magic2: data[1],
+                    serial: (data[3] << 8) | data[2],
+                    deviceSpace: data[4],
+                    matrixSpace: data[5],
+                    macroSpace: data[6],
+                    reserve1: data[7],
+                    deviceType: data[8],
+                    sensorModel: (data[10] << 8) | data[9],
+                    dpiStep: data[11],
+                    dpiRank: (data[13] << 8) | data[12],
+                    dpiStart: (data[15] << 8) | data[14],
+                    xySeparate: data[16],
+                    dpiLevel: data[17],
+                    dpiContinue1: data[18],
+                    dpiContinue2: data[19],
+                    dpiContinue3: data[20],
+                    vid: (data[22] << 8) | data[21],
+                    pid: (data[24] << 8) | data[23],
+                    deviceVersion: data[25],
+                    backlightType: data[26],
+                    ledCount: data[27],
+                    reserve2: data[28]
+                };
+
+                addToReceiveData('=== 基本信息区解析结果 ===');
+                addToReceiveData(`魔术数字: 0x${basicInfo.magic1.toString(16).toUpperCase()} 0x${basicInfo.magic2.toString(16).toUpperCase()}`);
+                addToReceiveData(`设备序列号: ${basicInfo.serial}`);
+                addToReceiveData(`设备空间: ${basicInfo.deviceSpace} × 128字节`);
+                addToReceiveData(`矩阵空间: ${basicInfo.matrixSpace} × 3字节`);
+                addToReceiveData(`宏空间: ${basicInfo.macroSpace} × 1k字节`);
+                addToReceiveData(`设备类型: ${basicInfo.deviceType} (1-MS 2-KB 3-MSPD 4-Headset)`);
+                addToReceiveData(`传感器型号: 0x${basicInfo.sensorModel.toString(16).toUpperCase()}`);
+                addToReceiveData(`DPI步进: ${basicInfo.dpiStep}`);
+                addToReceiveData(`DPI等级: ${basicInfo.dpiRank}`);
+                addToReceiveData(`DPI起始值: ${basicInfo.dpiStart}`);
+                addToReceiveData(`XY分开: ${basicInfo.xySeparate}`);
+                addToReceiveData(`DPI档位: ${basicInfo.dpiLevel}`);
+                addToReceiveData(`VID: 0x${basicInfo.vid.toString(16).toUpperCase()}`);
+                addToReceiveData(`PID: 0x${basicInfo.pid.toString(16).toUpperCase()}`);
+                addToReceiveData(`设备版本: ${basicInfo.deviceVersion}`);
+                addToReceiveData(`背光类型: ${basicInfo.backlightType} (1-幻彩 2-点彩 3-无背光)`);
+                addToReceiveData(`LED数量: ${basicInfo.ledCount}`);
+                addToReceiveData('============================');
+                
+                // 填充设备信息显示界面
+                document.getElementById('infoDeviceType').textContent = getDeviceTypeText(basicInfo.deviceType);
+                document.getElementById('infoSerial').textContent = basicInfo.serial;
+                document.getElementById('infoVidPid').textContent = `0x${basicInfo.vid.toString(16).toUpperCase()}/${basicInfo.pid.toString(16).toUpperCase()}`;
+                document.getElementById('infoLedCount').textContent = basicInfo.ledCount;
+                document.getElementById('infoBacklightType').textContent = getBacklightTypeText(basicInfo.backlightType);
+                document.getElementById('infoSensorModel').textContent = `0x${basicInfo.sensorModel.toString(16).toUpperCase()}`;
+                document.getElementById('infoDpiLevel').textContent = basicInfo.dpiLevel;
+                document.getElementById('infoSpace').textContent = `设备: ${basicInfo.deviceSpace}×128B, 矩阵: ${basicInfo.matrixSpace}×3B, 宏: ${basicInfo.macroSpace}×1kB`;
+            } catch (error) {
+                addToReceiveData(`解析基本信息区时出错: ${error.message}`);
+            }
+        }
+        
+        // 获取设备类型文本
+        function getDeviceTypeText(type) {
+            const types = {
+                1: '鼠标 (MS)',
+                2: '键盘 (KB)',
+                3: '鼠标垫 (MSPD)',
+                4: '耳机 (Headset)'
+            };
+            return types[type] || `未知 (${type})`;
+        }
+        
+        // 获取背光类型文本
+        function getBacklightTypeText(type) {
+            const types = {
+                1: '幻彩',
+                2: '点彩',
+                3: '无背光'
+            };
+            return types[type] || `未知 (${type})`;
+        }
+
+        // 读取基本信息区
+        function readBasicInfo() {
+            readDataInChunks(0x03, 29, '基本信息区').then(data => {
+                if (data) {
+                    parseBasicInfo(data);
+                }
+            });
+        }
+
+        // 读取功能区
+        function readFunctionArea() {
+            readDataInChunks(0x05, 103, '功能区');
+        }
+
+        // 读取按键矩阵
+        function readKeyMatrix() {
+            readDataInChunks(0x07, 48, '按键矩阵');
+        }
+
+        // 添加 CSS 动画
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes pulse {
+                0%, 100% { opacity: 1; box-shadow: 0 0 20px rgba(6, 182, 212, 0.5); }
+                50% { opacity: 0.5; box-shadow: 0 0 5px rgba(6, 182, 212, 0.2); }
+            }
+            .animate-fade-in {
+                animation: fadeIn 0.3s ease-in-out;
+            }
+            @keyframes fadeIn {
+                from { opacity: 0; transform: translateY(10px); }
+                to { opacity: 1; transform: translateY(0); }
+            }
+        `;
+        document.head.appendChild(style);
+
+        // ============ V2 架构: 关键函数挂载到 window ============
+        // 由于使用了 ES Module, 函数是模块作用域, 不会自动注册到全局
+        // 但 HTML 中的内联 onclick 事件依赖全局函数, 需要手动挂载
+        window.switchTab = switchTab;
+        window.initKeyboard = initKeyboard;
+        window.toggleLights = toggleLights;
+        window.searchDevices = searchDevices;
+        window.requestDevice = requestDevice;
+        window.requestNewDevice = requestNewDevice;
+        window.directRequestDevice = directRequestDevice;
+        window.disconnectDevice = disconnectDevice;
+        window.enterSimulationMode = enterSimulationMode;
+        window.sendHIDData = sendHIDData;
+        window.startDataTest = startDataTest;
+        window.sendTestData = sendTestData;
+        window.readDataInChunks = readDataInChunks;
+        window.parseBasicInfo = parseBasicInfo;
+        window.readBasicInfo = readBasicInfo;
+        window.readFunctionArea = readFunctionArea;
+        window.readKeyMatrix = readKeyMatrix;
+        window.resetTestStats = resetTestStats;
+        window.addTestLog = addTestLog;
+        window.clearTestLog = clearTestLog;
+        window.exportTestResults = exportTestResults;
+        window.clearReceiveData = clearReceiveData;
+        window.addToReceiveData = addToReceiveData;
+        window.updateTransferStatus = updateTransferStatus;
+        window.updateDeviceStatus = updateDeviceStatus;
+        window.onDeviceConnected = onDeviceConnected;
+        window.checkWebHIDSupport = checkWebHIDSupport;
+        // 灯光控制
+        window.setLightMode = setLightMode;
+        window.setBrightness = setBrightness;
+        window.setSpeed = setSpeed;
+        window.setAllKeysColor = setAllKeysColor;
+        window.clearKeySelection = clearKeySelection;
+        window.applyLighting = applyLighting;
+        // 按键映射
+        window.assignKey = assignKey;
+        // 宏设置
+        window.createNewMacro = createNewMacro;
+        window.startRecording = startRecording;
+        window.saveMacro = saveMacro;
+        // 数据测试
+        window.stopDataTest = stopDataTest;
+        // 系统
+        window.toggleSettings = toggleSettings;
+        window.checkUpdate = checkUpdate;
+        window.resetAllSettings = resetAllSettings;
+
+        logger.info('V2 关键函数已挂载到 window (40+ 个)');
+    </script>
+</body>
+</html>

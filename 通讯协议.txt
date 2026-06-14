@@ -1,0 +1,593 @@
+
+
+/* =============================== 字节提取宏（安全型）=============================== */
+#define USB_SHORT_GET_LOW(x)  ((uint8_t)(((uint16_t)(x)) & 0xFFU))   // 取低8位
+#define USB_SHORT_GET_HIGH(x) ((uint8_t)((((uint16_t)(x)) >> 8) & 0xFFU)) // 取高8位
+
+/* =============================== 功能区可配置参数宏定义 =============================== */
+
+// ----- Profile 基础设置 -----
+#define PROFILE_DEFAULT             0x00     // 默认 Profile
+#define LIGHT_MODE_DEFAULT          0x01     // 默认灯光模式
+#define LIGHT_LEVEL_DEFAULT         0x04     // 默认灯光亮度
+#define LIGHT_SPEED_DEFAULT         0x00     // 默认灯光速度
+#define LED_DIRECTION_DEFAULT        0x00     // 默认 LED 方向
+#define MIX_COLOUR_DEFAULT           0x01     // 默认混色设置
+#define MAIN_COLOUR_R                255      // 主颜色红
+#define MAIN_COLOUR_G                255      // 主颜色绿
+#define MAIN_COLOUR_B                255      // 主颜色蓝
+#define RESERVED_BYTE                 0x00     // 保留字节默认值
+
+// ----- 回报率设置 -----
+#define REPORT_PPT_DEFAULT           0x06     // 默认 24G 回报率
+#define REPORT_USB_DEFAULT           0x06     // 默认 USB 回报率
+#define DPI_RANK_DEFAULT             0x01     // 默认 DPI 档位索引
+#define LIFT_HEIGHT_DEFAULT           0x00     // 默认静默高度
+
+// ----- 8 档 DPI 定义（每档9字节）-----
+// 注意：DPI 数值以整数形式定义，实际存储时自动拆分为高低字节
+// 第1档：800 DPI
+#define DPI1_ENABLE                  0x01
+#define DPI1_XY_SEPARATE             0x00
+#define DPI1_X                        800
+#define DPI1_Y                        800
+#define DPI1_COLOUR_R                 0x00
+#define DPI1_COLOUR_G                 0x00
+#define DPI1_COLOUR_B                 0xFF
+
+// 第2档：1600 DPI
+#define DPI2_ENABLE                  0x01
+#define DPI2_XY_SEPARATE             0x00
+#define DPI2_X                       1600
+#define DPI2_Y                       1600
+#define DPI2_COLOUR_R                 0x00
+#define DPI2_COLOUR_G                 0x00
+#define DPI2_COLOUR_B                 0xFF
+
+// 第3档：3200 DPI
+#define DPI3_ENABLE                  0x01
+#define DPI3_XY_SEPARATE             0x00
+#define DPI3_X                       3200
+#define DPI3_Y                       3200
+#define DPI3_COLOUR_R                 0x00
+#define DPI3_COLOUR_G                 0x00
+#define DPI3_COLOUR_B                 0xFF
+
+// 第4档：6400 DPI
+#define DPI4_ENABLE                  0x01
+#define DPI4_XY_SEPARATE             0x00
+#define DPI4_X                       6400
+#define DPI4_Y                       6400
+#define DPI4_COLOUR_R                 0x00
+#define DPI4_COLOUR_G                 0x00
+#define DPI4_COLOUR_B                 0xFF
+
+// 第5档：12800 DPI
+#define DPI5_ENABLE                  0x01
+#define DPI5_XY_SEPARATE             0x00
+#define DPI5_X                      12800
+#define DPI5_Y                      12800
+#define DPI5_COLOUR_R                 0x00
+#define DPI5_COLOUR_G                 0x00
+#define DPI5_COLOUR_B                 0xFF
+
+// 第6档：26000 DPI
+#define DPI6_ENABLE                  0x01
+#define DPI6_XY_SEPARATE             0x00
+#define DPI6_X                      26000
+#define DPI6_Y                      26000
+#define DPI6_COLOUR_R                 0x00
+#define DPI6_COLOUR_G                 0x00
+#define DPI6_COLOUR_B                 0xFF
+
+// 第7档：10000 DPI
+#define DPI7_ENABLE                  0x01
+#define DPI7_XY_SEPARATE             0x00
+#define DPI7_X                      10000
+#define DPI7_Y                      10000
+#define DPI7_COLOUR_R                 0x00
+#define DPI7_COLOUR_G                 0x00
+#define DPI7_COLOUR_B                 0xFF
+
+// 第8档：30000 DPI (X) / 800 DPI (Y)
+#define DPI8_ENABLE                  0x01
+#define DPI8_XY_SEPARATE             0x00
+#define DPI8_X                      30000
+#define DPI8_Y                        800
+#define DPI8_COLOUR_R                 0x00
+#define DPI8_COLOUR_G                 0x00
+#define DPI8_COLOUR_B                 0xFF
+
+// ----- 睡眠时间 -----
+#define G24_LIGHT_SLEEP_TIME        300      // 浅度睡眠：5分钟 (5*60)
+#define G24_DEEP_SLEEP_TIME         600      // 深度睡眠：10分钟 (10*60)
+
+// ----- 其他功能 -----
+#define LINEAR_CALIBRATION_DEFAULT   0x00     // 直线校准：0=关闭，1=开启
+#define RIPPLE_CORRECTION_DEFAULT    0x00     // 波纹修正：0=关闭，1=开启
+#define KEY_DELAY_DEFAULT             0x00     // 按键延时
+#define MOVE_SYNC_DEFAULT             0x00     // 移动同步：0=关闭，1=开启
+#define DPI_MODE_DEFAULT              0x00     // DPI 模式
+#define DPI_CHANGE_MODE_DEFAULT       0x01     // DPI 切换模式：1=左中右开启，0=关闭
+
+// =============================== 基本信息区可配置参数宏定义 ===============================
+
+// 基本信息区魔术数字
+#define HEAD_MAGIC1                  0xAA     // 魔术数字1
+#define HEAD_MAGIC2                  0x55     // 魔术数字2
+
+// 设备信息
+#define HEAD_DEVICE_SERIAL_DEFAULT    0x0000  // 默认设备序列号
+#define HEAD_DEVICE_SPACE_DEFAULT     0x01     // 默认设备空间大小 基本单位 = 128字节
+#define HEAD_MATRIX_SPACE_DEFAULT     0x0A     // 默认矩阵空间大小 基本单位 = 3字节
+#define HEAD_MACRO_SPACE_DEFAULT      0x03     // 默认宏空间大小 基本单位 = 1k字节
+#define HEAD_RESERVE1_DEFAULT         0x00     // 默认保留位
+#define HEAD_DEVICE_TYPE_DEFAULT      0x01     // 默认设备类型 1-MS 2-KB 3-MSPD 4-Headset
+
+// 传感器信息
+#define HEAD_SENSOR_MODEL_DEFAULT     0x3950   // 默认sensor型号
+#define HEAD_DPI_STEP_DEFAULT         0x32     // 默认DPI step
+#define HEAD_DPI_RANK_DEFAULT         0xA410   // 默认DPI rank
+#define HEAD_DPI_START_DEFAULT        0x0064   // 默认DPI起始值
+#define HEAD_XY_SEPARATE_DEFAULT      0x01     // 默认xy分开
+#define HEAD_DPI_LEVEL_DEFAULT        0x08     // 默认DPI档位等级
+
+// DPI继续项
+#define HEAD_DPI_CONTINUE1_DEFAULT    0x00     // 默认DPI continue tohave
+#define HEAD_DPI_CONTINUE2_DEFAULT    0x00     // 默认DPI continue tohave
+#define HEAD_DPI_CONTINUE3_DEFAULT    0x00     // 默认DPI continue tohave
+
+// 设备VID/PID
+#define HEAD_VID_DEFAULT              0x3879   // 默认设备VID
+#define HEAD_PID_DEFAULT              0x1110   // 默认设备PID
+
+// 其他信息
+#define HEAD_DEVICE_VERSION_DEFAULT   0x00     // 默认Device version 1: USversion 2:UKversion 3:Protuguese-Brazilian
+#define HEAD_BACKLIGHT_TYPE_DEFAULT   0x01     // 默认设备类型 1-幻彩 2-点彩 3-无背光
+#define HEAD_LED_COUNT_DEFAULT        0x01     // 默认led数量
+#define HEAD_RESERVE2_DEFAULT         0x00     // 默认保留位
+
+
+// 按键功能类型定义
+typedef enum {
+    KEY_TYPE_KEYBOARD = 0x00,  // 键盘按键
+    KEY_TYPE_MOUSE = 0x01,     // 鼠标按键
+    KEY_TYPE_MACRO = 0x02,      // 宏按键
+    KEY_TYPE_FIRE = 0x03,       // 火力按键
+    KEY_TYPE_MULTI = 0x04,      // 组合按键
+    KEY_TYPE_MEDIA = 0x05,      // 媒体按键
+    KEY_TYPE_SYSTEM = 0x06,     // 系统按键
+    KEY_TYPE_CUSTOM = 0x07      // 自定义按键
+} KeyType_t;
+
+// 鼠标按键定义
+typedef enum {
+    MOUSE_BUTTON_LEFT = 0x01,   // 左键
+    MOUSE_BUTTON_RIGHT = 0x02,  // 右键
+    MOUSE_BUTTON_MIDDLE = 0x04, // 中键
+    MOUSE_BUTTON_SIDE1 = 0x08,  // 侧键1 (K4)
+    MOUSE_BUTTON_SIDE2 = 0x10   // 侧键2 (K5)
+} MouseButton_t;
+
+// 键盘按键结构体
+typedef struct {
+    uint8_t key_type;     // 按键类型
+    uint8_t key_value1;   // 第一个键值（热键/特殊键）
+    uint8_t key_value2;   // 第二个键值（普通键/具体功能）
+} KeyConfig_t;
+
+
+
+// 功能参数数组定义
+uint8_t func_parameter_tab[FUNC_TAB_SIZE] = {
+    //===========================================PROFILE1
+    PROFILE_DEFAULT,                                   // 0   PROFILE
+    LIGHT_MODE_DEFAULT,                                // 1   灯光模式
+    LIGHT_LEVEL_DEFAULT,                               // 2   灯光LIGHT
+    LIGHT_SPEED_DEFAULT,                               // 3   灯光速度
+    LED_DIRECTION_DEFAULT,                             // 4   led方向
+    MIX_COLOUR_DEFAULT,                                // 5   mix_colour
+    MAIN_COLOUR_R,                                      // 6   r_main_data
+    MAIN_COLOUR_G,                                      // 7   g_main_data
+    MAIN_COLOUR_B,                                      // 8   b_main_data
+    RESERVED_BYTE,                                      // 9   reserve
+
+    // 回报率设置
+    REPORT_PPT_DEFAULT,                                 // 10  report_ppt
+    REPORT_USB_DEFAULT,                                 // 11  report_usb
+    DPI_RANK_DEFAULT,                                   // 12  DPIRank
+    LIFT_HEIGHT_DEFAULT,                                // 13  静默高度
+
+    // 第一档dpi
+    DPI1_ENABLE,                                        // 14  是否使用该组dpi
+    DPI1_XY_SEPARATE,                                   // 15  XY是否分开调
+    USB_SHORT_GET_LOW(DPI1_X),                          // 16  X->DPI_L
+    USB_SHORT_GET_HIGH(DPI1_X),                         // 17  X->DPI_H
+    USB_SHORT_GET_LOW(DPI1_Y),                          // 18  Y->DPI_L
+    USB_SHORT_GET_HIGH(DPI1_Y),                         // 19  Y->DPI_H
+    DPI1_COLOUR_R,                                      // 20  DPI COLOUR RED
+    DPI1_COLOUR_G,                                      // 21  DPI COLOUR GREEN
+    DPI1_COLOUR_B,                                      // 22  DPI COLOUR BLUE
+
+    // 第二档dpi
+    DPI2_ENABLE,                                        // 23
+    DPI2_XY_SEPARATE,                                   // 24
+    USB_SHORT_GET_LOW(DPI2_X),                          // 25
+    USB_SHORT_GET_HIGH(DPI2_X),                         // 26
+    USB_SHORT_GET_LOW(DPI2_Y),                          // 27
+    USB_SHORT_GET_HIGH(DPI2_Y),                         // 28
+    DPI2_COLOUR_R,                                      // 29
+    DPI2_COLOUR_G,                                      // 30
+    DPI2_COLOUR_B,                                      // 31
+
+    // 第三档dpi
+    DPI3_ENABLE,                                        // 32
+    DPI3_XY_SEPARATE,                                   // 33
+    USB_SHORT_GET_LOW(DPI3_X),                          // 34
+    USB_SHORT_GET_HIGH(DPI3_X),                         // 35
+    USB_SHORT_GET_LOW(DPI3_Y),                          // 36
+    USB_SHORT_GET_HIGH(DPI3_Y),                         // 37
+    DPI3_COLOUR_R,                                      // 38
+    DPI3_COLOUR_G,                                      // 39
+    DPI3_COLOUR_B,                                      // 40
+
+    // 第四档dpi
+    DPI4_ENABLE,                                        // 41
+    DPI4_XY_SEPARATE,                                   // 42
+    USB_SHORT_GET_LOW(DPI4_X),                          // 43
+    USB_SHORT_GET_HIGH(DPI4_X),                         // 44
+    USB_SHORT_GET_LOW(DPI4_Y),                          // 45
+    USB_SHORT_GET_HIGH(DPI4_Y),                         // 46
+    DPI4_COLOUR_R,                                      // 47
+    DPI4_COLOUR_G,                                      // 48
+    DPI4_COLOUR_B,                                      // 49
+
+    // 第五档dpi
+    DPI5_ENABLE,                                        // 50
+    DPI5_XY_SEPARATE,                                   // 51
+    USB_SHORT_GET_LOW(DPI5_X),                          // 52
+    USB_SHORT_GET_HIGH(DPI5_X),                         // 53
+    USB_SHORT_GET_LOW(DPI5_Y),                          // 54
+    USB_SHORT_GET_HIGH(DPI5_Y),                         // 55
+    DPI5_COLOUR_R,                                      // 56
+    DPI5_COLOUR_G,                                      // 57
+    DPI5_COLOUR_B,                                      // 58
+
+    // 第六档dpi
+    DPI6_ENABLE,                                        // 59
+    DPI6_XY_SEPARATE,                                   // 60
+    USB_SHORT_GET_LOW(DPI6_X),                          // 61
+    USB_SHORT_GET_HIGH(DPI6_X),                         // 62
+    USB_SHORT_GET_LOW(DPI6_Y),                          // 63
+    USB_SHORT_GET_HIGH(DPI6_Y),                         // 64
+    DPI6_COLOUR_R,                                      // 65
+    DPI6_COLOUR_G,                                      // 66
+    DPI6_COLOUR_B,                                      // 67
+
+    // 第七档dpi
+    DPI7_ENABLE,                                        // 68
+    DPI7_XY_SEPARATE,                                   // 69
+    USB_SHORT_GET_LOW(DPI7_X),                          // 70
+    USB_SHORT_GET_HIGH(DPI7_X),                         // 71
+    USB_SHORT_GET_LOW(DPI7_Y),                          // 72
+    USB_SHORT_GET_HIGH(DPI7_Y),                         // 73
+    DPI7_COLOUR_R,                                      // 74
+    DPI7_COLOUR_G,                                      // 75
+    DPI7_COLOUR_B,                                      // 76
+
+    // 第八档dpi
+    DPI8_ENABLE,                                        // 77
+    DPI8_XY_SEPARATE,                                   // 78
+    USB_SHORT_GET_LOW(DPI8_X),                          // 79
+    USB_SHORT_GET_HIGH(DPI8_X),                         // 80
+    USB_SHORT_GET_LOW(DPI8_Y),                          // 81
+    USB_SHORT_GET_HIGH(DPI8_Y),                         // 82
+    DPI8_COLOUR_R,                                      // 83
+    DPI8_COLOUR_G,                                      // 84
+    DPI8_COLOUR_B,                                      // 85
+
+    // 睡眠及其他功能
+    RESERVED_BYTE,                                      // 86
+    RESERVED_BYTE,                                      // 87
+    USB_SHORT_GET_LOW(G24_DEEP_SLEEP_TIME),             // 88 deep sleep_time_l
+    USB_SHORT_GET_HIGH(G24_DEEP_SLEEP_TIME),            // 89 deep sleep_time_h
+    RESERVED_BYTE,                                      // 90
+    RESERVED_BYTE,                                      // 91
+    LINEAR_CALIBRATION_DEFAULT,                         // 92 直线校准
+    RIPPLE_CORRECTION_DEFAULT,                          // 93 波纹修正
+    RESERVED_BYTE,                                      // 94
+    RESERVED_BYTE,                                      // 95
+    RESERVED_BYTE,                                      // 96
+    KEY_DELAY_DEFAULT,                                  // 97 按键延时
+    MOVE_SYNC_DEFAULT,                                  // 98 移动同步
+    DPI_MODE_DEFAULT,                                   // 99 dpi_mode
+    USB_SHORT_GET_LOW(G24_LIGHT_SLEEP_TIME),            // 100 light sleep_time_l
+    USB_SHORT_GET_HIGH(G24_LIGHT_SLEEP_TIME),           // 101 light sleep_time_h
+    DPI_CHANGE_MODE_DEFAULT,                            // 102 dpi_change_mode
+};
+
+// 基本信息区数组定义
+uint8_t head_description_tab[HEAD_TAB_SIZE] = {
+    HEAD_MAGIC1,                                // 0  HEAD_MAGIC1_INDEX
+    HEAD_MAGIC2,                                // 1  HEAD_MAGIC2_INDEX
+    USB_SHORT_GET_LOW(HEAD_DEVICE_SERIAL_DEFAULT), // 2  HEAD_DEVICE_SERIAL_L_INDEX  设备序列号  L
+    USB_SHORT_GET_HIGH(HEAD_DEVICE_SERIAL_DEFAULT), // 3  HEAD_DEVICE_SERIAL_H_INDEX      设备序列号  H
+    HEAD_DEVICE_SPACE_DEFAULT,                  // 4  HEAD_DEVICE_SPACE_INDEX  设备空间大小  基本单位 = 128字节
+    HEAD_MATRIX_SPACE_DEFAULT,                  // 5  HEAD_MATRIX_SPACE_INDEX  矩阵空间大小  基本单位 = 3字节
+    HEAD_MACRO_SPACE_DEFAULT,                   // 6  HEAD_MACRO_SPACE_INDEX  宏空间大小    基本单位 = 1k字节
+    HEAD_RESERVE1_DEFAULT,                      // 7  HEAD_RESERVE1_INDEX  保留位
+    HEAD_DEVICE_TYPE_DEFAULT,                   // 8  HEAD_DEVICE_TYPE_INDEX  设备类型      1-MS 2-KB 3-MSPD 4-Headset
+    USB_SHORT_GET_LOW(HEAD_SENSOR_MODEL_DEFAULT), // 9  HEAD_SENSOR_MODEL_L_INDEX   sensor 型号  L
+    USB_SHORT_GET_HIGH(HEAD_SENSOR_MODEL_DEFAULT), // 10 HEAD_SENSOR_MODEL_H_INDEX  sensor 型号  H
+    HEAD_DPI_STEP_DEFAULT,                      // 11 HEAD_DPI_STEP_INDEX  DPI  step
+    USB_SHORT_GET_LOW(HEAD_DPI_RANK_DEFAULT),   // 12 HEAD_DPI_RANK_L_INDEX  DPI rank_L
+    USB_SHORT_GET_HIGH(HEAD_DPI_RANK_DEFAULT),  // 13 HEAD_DPI_RANK_H_INDEX  DPI rank_H
+    USB_SHORT_GET_LOW(HEAD_DPI_START_DEFAULT),  // 14 HEAD_DPI_START_L_INDEX  DPI  起始值 L
+    USB_SHORT_GET_HIGH(HEAD_DPI_START_DEFAULT), // 15 HEAD_DPI_START_H_INDEX      DPI  起始值 H
+    HEAD_XY_SEPARATE_DEFAULT,                   // 16 HEAD_XY_SEPARATE_INDEX  xy 分开
+    HEAD_DPI_LEVEL_DEFAULT,                     // 17 HEAD_DPI_LEVEL_INDEX  DPI 档位等级
+    HEAD_DPI_CONTINUE1_DEFAULT,                 // 18 HEAD_DPI_CONTINUE1_INDEX  DPI continue tohave
+    HEAD_DPI_CONTINUE2_DEFAULT,                 // 19 HEAD_DPI_CONTINUE2_INDEX  DPI continue tohave
+    HEAD_DPI_CONTINUE3_DEFAULT,                 // 20 HEAD_DPI_CONTINUE3_INDEX  DPI continue tohave
+    USB_SHORT_GET_LOW(HEAD_VID_DEFAULT),        // 21 HEAD_VID_L_INDEX  equipment VID_L
+    USB_SHORT_GET_HIGH(HEAD_VID_DEFAULT),       // 22 HEAD_VID_H_INDEX  equipment VID_H
+    USB_SHORT_GET_LOW(HEAD_PID_DEFAULT),        // 23 HEAD_PID_L_INDEX  equipment PID_L
+    USB_SHORT_GET_HIGH(HEAD_PID_DEFAULT),       // 24 HEAD_PID_H_INDEX  equipment PID_H
+    HEAD_DEVICE_VERSION_DEFAULT,                // 25 HEAD_DEVICE_VERSION_INDEX  Device version  1: USversion 2:UKversion 3:Protuguese-Brazilian
+    HEAD_BACKLIGHT_TYPE_DEFAULT,                // 26 HEAD_BACKLIGHT_TYPE_INDEX  设备类型 1-幻彩 2-点彩 3-无背光
+    HEAD_LED_COUNT_DEFAULT,                     // 27 HEAD_LED_COUNT_INDEX  led数量
+    HEAD_RESERVE2_DEFAULT                       // 28 HEAD_RESERVE2_INDEX
+};
+
+// 按键矩阵数组定义
+KeyConfig_t key_matrix_configs[16] = {
+    // 键盘按键: 类型, 热键, 普通键
+    {KEY_TYPE_KEYBOARD, 0, KEY_KPSLASH},
+    {KEY_TYPE_KEYBOARD, 0, KEY_KPASTERISK},
+    {KEY_TYPE_KEYBOARD, 0, KEY_KPMINUS},
+    {KEY_TYPE_KEYBOARD, 0, KEY_NUMLOCK},
+    {KEY_TYPE_KEYBOARD, 0, KEY_KP7},
+    {KEY_TYPE_KEYBOARD, 0, KEY_KP8},
+    {KEY_TYPE_KEYBOARD, 0, KEY_KP9},
+    {KEY_TYPE_KEYBOARD, 0, KEY_KP0},
+    {KEY_TYPE_KEYBOARD, 0, KEY_KPENTER},
+    {KEY_TYPE_KEYBOARD, 0, KEY_KP6},
+    {KEY_TYPE_KEYBOARD, 0, KEY_KP5},
+    {KEY_TYPE_KEYBOARD, 0, KEY_KP4},
+    {KEY_TYPE_KEYBOARD, 0, KEY_KP1},
+    {KEY_TYPE_KEYBOARD, 0, KEY_KP2},
+    {KEY_TYPE_KEYBOARD, 0, KEY_KP3},
+    {KEY_TYPE_KEYBOARD, 0, 0xFF} // 无效按键
+};
+
+
+设备相关代码部分：
+
+// AP通讯Report ID
+#define AP_REPORT_ID 0x04
+
+// AP命令宏定义
+// 基本信息区相关
+#define AP_CMD_READ_BASIC_INFO    0x03 // 读取设备基本信息区
+#define AP_CMD_WRITE_BASIC_INFO   0x04 // 写入设备基本信息区
+
+// 功能区相关（RAM）
+#define AP_CMD_READ_RAM           0x05 // 读取功能区参数
+#define AP_CMD_WRITE_RAM          0x06 // 写入功能区参数
+
+// 按键矩阵相关
+#define AP_CMD_READ_MATRIX         0x07 // 读取按键矩阵配置
+#define AP_CMD_READ_CURRENT_MATRIX 0x08 // 读取当前按键矩阵状态
+#define AP_CMD_WRITE_MATRIX        0x09 // 写入按键矩阵配置
+
+// LED相关
+#define AP_CMD_READ_LED_DEFINE     0x0A // 读取LED定义
+#define AP_CMD_WRITE_LED_DEFINE    0x0B // 写入LED定义
+#define AP_CMD_WRITE_TICK_LED      0x11 // 写入LED tick
+#define AP_CMD_WRITE_LED_START     0x12 // 开始LED
+#define AP_CMD_WRITE_LED_STOP      0x13 // 停止LED
+#define AP_CMD_READ_LED_INDEX      0x1B // 读取LED索引
+
+// 鼠标相关
+#define AP_CMD_ANGLE_SNAPPING      0x19 // 角度捕捉
+#define AP_CMD_READ_POWER          0x1A // 读取电源信息
+#define AP_CMD_READ_SYNC           0x1D // 读取同步信息
+
+// 设备ID相关
+#define AP_CMD_READ_DEVICE_ID      0x30 // 读取设备ID
+#define AP_CMD_WRITE_DEVICE_ID     0x31 // 写入设备ID
+
+// 测试相关
+#define AP_CMD_TEST_KEY            0x20 // 测试按键
+#define AP_CMD_TEST_COLOR          0xAA // 测试颜色
+
+
+
+void ap_protocol_process(void) {
+    if (g_recieve_flag == 0) return;
+    g_recieve_flag = 0;
+    
+    // 打印接收到的缓冲区
+    ap_protocol_print_buffer();
+    
+    // 检查是否为AP通讯数据（report id == 0x04）
+    if (g_usb_recieve_buf[0] == AP_REPORT_ID) {
+        // 处理AP通讯协议
+        uint8_t cmd = g_usb_recieve_buf[4]; // 第五个字节：CMD
+        
+        switch (cmd) {
+            case AP_CMD_READ_BASIC_INFO:
+            {
+                uint8_t length = g_usb_recieve_buf[5]; // 第六个字节：读取长度
+                uint16_t offset = (g_usb_recieve_buf[7] << 8) | g_usb_recieve_buf[6]; // 第七、八字节：偏移地址（小端序）
+                
+                printf("AP Command: Read Basic Info\r\n");
+                printf("Length: %d, Offset: %d\r\n", length, offset);
+                
+                // 准备响应数据
+                uint8_t response[64] = {0};
+                
+                // 前8个字节与接收到的数据一致
+                for (int i = 0; i < 8; i++) {
+                    response[i] = g_usb_recieve_buf[i];
+                }
+                
+                // 从第9个字节开始，填充基本信息区数据
+                if (offset < HEAD_TAB_SIZE) {
+                    uint8_t actual_length = (offset + length) > HEAD_TAB_SIZE ? (HEAD_TAB_SIZE - offset) : length;
+                    for (int i = 0; i < actual_length; i++) {
+                        response[8 + i] = head_description_tab[offset + i];
+                    }
+                }
+                
+                // 发送响应数据
+                ap_protocol_send_response(response, 8 + length);
+            }
+            break;
+            
+            case AP_CMD_WRITE_BASIC_INFO:
+            {
+                printf("AP Command: Write Basic Info\r\n");
+                // 后续实现
+            }
+            break;
+            
+            case AP_CMD_READ_RAM:
+            {
+                printf("AP Command: Read Function Area Params\r\n");
+                // 后续实现
+            }
+            break;
+            
+            case AP_CMD_WRITE_RAM:
+            {
+                printf("AP Command: Write Function Area Params\r\n");
+                // 后续实现
+            }
+            break;
+            
+            case AP_CMD_READ_MATRIX:
+            {
+                printf("AP Command: Read Key Matrix Config\r\n");
+                // 后续实现
+            }
+            break;
+            
+            case AP_CMD_READ_CURRENT_MATRIX:
+            {
+                printf("AP Command: Read Current Key Matrix Status\r\n");
+                // 后续实现
+            }
+            break;
+            
+            case AP_CMD_WRITE_MATRIX:
+            {
+                printf("AP Command: Write Key Matrix Config\r\n");
+                // 后续实现
+            }
+            break;
+            
+            case AP_CMD_READ_LED_DEFINE:
+            {
+                printf("AP Command: Read LED Define\r\n");
+                // 后续实现
+            }
+            break;
+            
+            case AP_CMD_WRITE_LED_DEFINE:
+            {
+                printf("AP Command: Write LED Define\r\n");
+                // 后续实现
+            }
+            break;
+            
+            case AP_CMD_WRITE_TICK_LED:
+            {
+                printf("AP Command: Write Tick LED\r\n");
+                // 后续实现
+            }
+            break;
+            
+            case AP_CMD_WRITE_LED_START:
+            {
+                printf("AP Command: Write LED Start\r\n");
+                // 后续实现
+            }
+            break;
+            
+            case AP_CMD_WRITE_LED_STOP:
+            {
+                printf("AP Command: Write LED Stop\r\n");
+                // 后续实现
+            }
+            break;
+            
+            case AP_CMD_READ_LED_INDEX:
+            {
+                printf("AP Command: Read LED Index\r\n");
+                // 后续实现
+            }
+            break;
+            
+            case AP_CMD_ANGLE_SNAPPING:
+            {
+                printf("AP Command: Angle Snapping\r\n");
+                // 后续实现
+            }
+            break;
+            
+            case AP_CMD_READ_POWER:
+            {
+                printf("AP Command: Read Power\r\n");
+                // 后续实现
+            }
+            break;
+            
+            case AP_CMD_READ_SYNC:
+            {
+                printf("AP Command: Read Sync\r\n");
+                // 后续实现
+            }
+            break;
+            
+            case AP_CMD_READ_DEVICE_ID:
+            {
+                printf("AP Command: Read Device ID\r\n");
+                // 后续实现
+            }
+            break;
+            
+            case AP_CMD_WRITE_DEVICE_ID:
+            {
+                printf("AP Command: Write Device ID\r\n");
+                // 后续实现
+            }
+            break;
+            
+            case AP_CMD_TEST_KEY:
+            {
+                printf("AP Command: Test Key\r\n");
+                // 后续实现
+            }
+            break;
+            
+            case AP_CMD_TEST_COLOR:
+            {
+                printf("AP Command: Test Color\r\n");
+                // 后续实现
+            }
+            break;
+            
+            default:
+                // 其他指令，暂不处理
+                printf("AP Command: Unknown (0x%02x)\r\n", cmd);
+                break;
+        }
+    }
+    else {
+        // 其他report id的数据，暂不处理
+        printf("Other report id: 0x%02x\r\n", g_usb_recieve_buf[0]);
+    }
+    
+    printf("dev_state = %d\r\n", hUsbDeviceFS.dev_state);
+}

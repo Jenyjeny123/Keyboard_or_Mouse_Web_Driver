@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>调试 - TestService</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-900 text-white p-6">
+    <h1 class="text-2xl text-cyan-400 mb-4">🐛 TestService 调试</h1>
+    <pre id="output" class="bg-slate-800 p-4 rounded text-xs whitespace-pre-wrap"></pre>
+    <script type="module">
+        import { TEST, PROTOCOL, LIGHTING } from './src/core/Config.js';
+        import { MockTransport } from './src/transport/MockTransport.js';
+        import { Protocol } from './src/protocol/Protocol.js';
+        import { CMD } from './src/protocol/commands/BaseCommands.js';
+        import { TestService } from './src/services/TestService.js';
+
+        const log = (msg) => {
+            document.getElementById('output').textContent += msg + '\n';
+            console.log(msg);
+        };
+
+        log('=== 调试信息 ===');
+        log('TEST 配置: ' + JSON.stringify(TEST, null, 2));
+        log('PROTOCOL 配置: ' + JSON.stringify(PROTOCOL, null, 2));
+        log('LIGHTING 配置: ' + JSON.stringify(LIGHTING, null, 2));
+
+        // 创建服务
+        const transport = new MockTransport();
+        await transport.connect();  // ← 关键: 必须先连接
+        const protocol = new Protocol(transport);
+        const testService = new TestService(protocol);
+
+        log('\n=== 初始 config ===');
+        log('config: ' + JSON.stringify(testService.config, null, 2));
+        log('dataLength: ' + testService.config.dataLength);
+        log('dataType: ' + testService.config.dataType);
+
+        // 生成测试数据
+        const testData = testService._generateTestData(0);
+        log('\n=== 生成测试数据 ===');
+        log('data length: ' + testData.length);
+        log('data: ' + Array.from(testData).map(b => b.toString(16).padStart(2, '0')).join(' '));
+
+        // 启动测试 (3次)
+        log('\n=== 启动测试 ===');
+        try {
+            await testService.startTest({ sendCount: 3, interval: 10 });
+            log('\n=== 测试完成 ===');
+            log('stats: ' + JSON.stringify(testService.getStats(), null, 2));
+        } catch (err) {
+            log('测试异常: ' + err.message);
+        }
+    </script>
+</body>
+</html>
