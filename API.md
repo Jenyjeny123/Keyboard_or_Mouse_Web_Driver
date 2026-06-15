@@ -8,6 +8,17 @@
 2. [协议层 (Protocol)](#-协议层-protocol)
 3. [传输层 (Transport)](#-传输层-transport)
 4. [服务层 (Services)](#-服务层-services)
+   - [DeviceService](#deviceservice)
+   - [LightingService](#lightingservice)
+   - [TestService](#testservice)
+   - [KeymapService](#keymapservice) 🆕
+   - [PerformanceService](#performanceservice) 🆕
+   - [MacroService](#macroservice) 🆕
+5. [UI 组件 (UI Components)](#-ui-组件-ui-components)
+
+---
+
+## 🆕 新增服务 (V2.2)
 5. [UI 组件 (UI Components)](#-ui-组件-ui-components)
 
 ---

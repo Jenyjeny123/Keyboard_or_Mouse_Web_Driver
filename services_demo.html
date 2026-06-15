@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-version="services-1.0">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <title>Services Demo - Keymap/Performance/Macro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="src/ui/components/components.css">
+    <style>
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.6);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(148, 163, 184, 0.1);
+        }
+        .log-line {
+            font-family: 'Cascadia Code', 'Consolas', monospace;
+            font-size: 0.75rem;
+            padding: 2px 0;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+        .log-event { color: #67e8f9; }
+        .log-success { color: #6ee7b7; }
+        .log-error { color: #fca5a5; }
+        .log-warn { color: #fcd34d; }
+        .log-info { color: #94a3b8; }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen">
+    <div class="container mx-auto p-6 max-w-7xl">
+        <!-- Header -->
+        <header class="mb-6">
+            <h1 class="text-3xl font-bold tracking-tight text-white">
+                🎬 <span class="text-cyan-400">Services</span> Demo
+            </h1>
+            <p class="text-slate-400 text-sm mt-1">
+                KeymapService / PerformanceService / MacroService
+            </p>
+        </header>
+
+        <!-- 连接区 -->
+        <section class="glass-panel rounded-xl p-4 mb-4 flex items-center justify-between">
+            <div>
+                <span class="text-sm text-slate-400">设备状态:</span>
+                <span id="statusBadge" class="ml-2 px-3 py-1 rounded-full bg-slate-700 text-slate-300 text-sm">
+                    未连接
+                </span>
+            </div>
+            <div class="flex gap-2">
+                <button id="btnMock" class="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg transition">
+                    🧪 启动模拟模式
+                </button>
+                <button id="btnDisconnect" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition hidden">
+                    断开
+                </button>
+            </div>
+        </section>
+
+        <!-- Tabs -->
+        <div class="flex gap-1 border-b border-slate-700/30 mb-4">
+            <button class="tab-btn px-4 py-2 rounded-t-lg text-cyan-300 border-b-2 border-cyan-400" data-tab="keymap">
+                ⌨️ Keymap
+            </button>
+            <button class="tab-btn px-4 py-2 rounded-t-lg text-slate-400" data-tab="performance">
+                ⚡ Performance
+            </button>
+            <button class="tab-btn px-4 py-2 rounded-t-lg text-slate-400" data-tab="macro">
+                🎬 Macro
+            </button>
+        </div>
+
+        <!-- Keymap Tab -->
+        <div data-tab-content="keymap" class="tab-content space-y-4">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="glass-panel rounded-xl p-4">
+                    <h3 class="text-lg font-semibold text-cyan-300 mb-3">📂 配置文件</h3>
+                    <div id="profileList" class="space-y-2"></div>
+                    <button id="btnSwitchProfile" class="mt-3 w-full px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-sm">
+                        切换到选中 Profile
+                    </button>
+                </div>
+                <div class="glass-panel rounded-xl p-4">
+                    <h3 class="text-lg font-semibold text-cyan-300 mb-3">🔄 按键重映射</h3>
+                    <div class="space-y-3">
+                        <div class="grid grid-cols-2 gap-2">
+                            <select id="fromKey" class="bg-slate-800 border border-slate-700 text-white rounded px-3 py-2 text-sm"></select>
+                            <select id="toKey" class="bg-slate-800 border border-slate-700 text-white rounded px-3 py-2 text-sm"></select>
+                        </div>
+                        <button id="btnRemap" class="w-full px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-sm">
+                            重新映射
+                        </button>
+                        <button id="btnReadMatrix" class="w-full px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-sm">
+                            📖 读取按键矩阵
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Performance Tab -->
+        <div data-tab-content="performance" class="tab-content hidden space-y-4">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="glass-panel rounded-xl p-4">
+                    <h3 class="text-lg font-semibold text-cyan-300 mb-3">🎯 DPI 控制</h3>
+                    <div class="space-y-3">
+                        <div class="text-center">
+                            <div class="text-4xl font-bold text-cyan-400" id="dpiDisplay">1200</div>
+                            <div class="text-xs text-slate-400 mt-1">当前 DPI</div>
+                        </div>
+                        <input id="dpiSlider" type="range" min="100" max="25600" step="100" value="1200"
+                            class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer">
+                        <div class="grid grid-cols-3 gap-2">
+                            <button class="dpi-level px-3 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded text-sm" data-dpi="800">800</button>
+                            <button class="dpi-level px-3 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded text-sm" data-dpi="1600">1600</button>
+                            <button class="dpi-level px-3 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded text-sm" data-dpi="3200">3200</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="glass-panel rounded-xl p-4">
+                    <h3 class="text-lg font-semibold text-cyan-300 mb-3">📡 轮询率</h3>
+                    <div class="space-y-3">
+                        <div class="text-center">
+                            <div class="text-4xl font-bold text-cyan-400" id="pollingDisplay">1000</div>
+                            <div class="text-xs text-slate-400 mt-1">Hz</div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-2">
+                            <button class="polling-btn px-3 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded text-sm" data-rate="125">125 Hz</button>
+                            <button class="polling-btn px-3 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded text-sm" data-rate="250">250 Hz</button>
+                            <button class="polling-btn px-3 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded text-sm" data-rate="500">500 Hz</button>
+                            <button class="polling-btn px-3 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded text-sm" data-rate="1000">1000 Hz</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="glass-panel rounded-xl p-4">
+                    <h3 class="text-lg font-semibold text-cyan-300 mb-3">📏 抬升 & 修正</h3>
+                    <div class="space-y-3">
+                        <div>
+                            <label class="text-sm text-slate-400">抬升高度</label>
+                            <div class="grid grid-cols-3 gap-2 mt-1">
+                                <button class="lift-btn px-3 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded text-sm" data-h="1">1mm</button>
+                                <button class="lift-btn px-3 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded text-sm" data-h="2">2mm</button>
+                                <button class="lift-btn px-3 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded text-sm" data-h="3">3mm</button>
+                            </div>
+                        </div>
+                        <label class="flex items-center justify-between cursor-pointer">
+                            <span class="text-sm text-slate-300">角度吸附</span>
+                            <input type="checkbox" id="angleSnapping" class="w-5 h-5 accent-cyan-500">
+                        </label>
+                        <label class="flex items-center justify-between cursor-pointer">
+                            <span class="text-sm text-slate-300">直线修正</span>
+                            <input type="checkbox" id="linearCal" class="w-5 h-5 accent-cyan-500">
+                        </label>
+                    </div>
+                </div>
+                <div class="glass-panel rounded-xl p-4">
+                    <h3 class="text-lg font-semibold text-cyan-300 mb-3">🚀 性能模式</h3>
+                    <div class="space-y-2">
+                        <button class="mode-btn w-full px-3 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded text-sm text-left" data-mode="standard">
+                            ⭐ 标准模式 <span class="text-xs text-slate-500">- 平衡性能与续航</span>
+                        </button>
+                        <button class="mode-btn w-full px-3 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded text-sm text-left" data-mode="balanced">
+                            ⚖️ 平衡模式 <span class="text-xs text-slate-300">- 推荐日常使用</span>
+                        </button>
+                        <button class="mode-btn w-full px-3 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded text-sm text-left" data-mode="gaming">
+                            🎮 游戏模式 <span class="text-xs text-slate-500">- 极致响应</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Macro Tab -->
+        <div data-tab-content="macro" class="tab-content hidden space-y-4">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="glass-panel rounded-xl p-4">
+                    <h3 class="text-lg font-semibold text-cyan-300 mb-3">🎬 宏录制</h3>
+                    <div class="space-y-3">
+                        <div>
+                            <label class="text-sm text-slate-400">选择槽位</label>
+                            <select id="macroSlot" class="w-full mt-1 bg-slate-800 border border-slate-700 text-white rounded px-3 py-2 text-sm">
+                                <option value="1">Slot 1</option>
+                                <option value="2">Slot 2</option>
+                                <option value="3">Slot 3</option>
+                            </select>
+                        </div>
+                        <div id="recordingStatus" class="p-3 rounded-lg bg-slate-800/50 text-center text-slate-400 text-sm">
+                            未在录制
+                        </div>
+                        <div class="grid grid-cols-2 gap-2">
+                            <button id="btnStartRecord" class="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-lg text-sm">
+                                ⏺ 开始录制
+                            </button>
+                            <button id="btnStopRecord" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-sm" disabled>
+                                ⏹ 停止
+                            </button>
+                        </div>
+                        <div class="grid grid-cols-3 gap-2">
+                            <button class="capture-btn px-3 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded text-sm" data-key="0x04">A</button>
+                            <button class="capture-btn px-3 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded text-sm" data-key="0x05">B</button>
+                            <button class="capture-btn px-3 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded text-sm" data-key="0x06">C</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="glass-panel rounded-xl p-4">
+                    <h3 class="text-lg font-semibold text-cyan-300 mb-3">▶️ 宏列表 & 播放</h3>
+                    <div id="macroList" class="space-y-2 max-h-64 overflow-y-auto"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 事件日志 -->
+        <section class="mt-4">
+            <div class="glass-panel rounded-xl p-4">
+                <div class="flex items-center justify-between mb-2">
+                    <h3 class="text-lg font-semibold text-cyan-300">📋 事件日志</h3>
+                    <button id="btnClearLog" class="text-xs text-slate-400 hover:text-white">清空</button>
+                </div>
+                <div id="logContainer" class="bg-slate-900/70 rounded-lg p-3 h-48 overflow-y-auto"></div>
+            </div>
+        </section>
+    </div>
+
+    <script type="module">
+        import { EventBus } from './src/core/EventBus.js';
+        import { Logger } from './src/core/Logger.js';
+        import { Protocol } from './src/protocol/Protocol.js';
+        import { MockTransport } from './src/transport/MockTransport.js';
+        import { WebHIDTransport } from './src/transport/WebHIDTransport.js';
+        import { DeviceService } from './src/services/DeviceService.js';
+        import { KeymapService } from './src/services/KeymapService.js';
+        import { PerformanceService } from './src/services/PerformanceService.js';
+        import { MacroService } from './src/services/MacroService.js';
+        import { Toast } from './src/ui/components/Toast.js';
+
+        const bus = new EventBus();
+        const logger = new Logger({ level: 'info' });
+        const toast = new Toast();
+        toast.mount(document.body);
+
+        // ==================== 日志系统 ====================
+        const logContainer = document.getElementById('logContainer');
+        function log(message, type = 'info') {
+            const time = new Date().toLocaleTimeString();
+            const line = document.createElement('div');
+            line.className = `log-line log-${type}`;
+            line.textContent = `[${time}] ${message}`;
+            logContainer.appendChild(line);
+            logContainer.scrollTop = logContainer.scrollHeight;
+        }
+        log('🚀 Services Demo 已启动', 'success');
+
+        // 监听所有服务事件
+        ['keymap', 'performance', 'macro'].forEach(prefix => {
+            bus.onAny(event => {
+                if (event.startsWith(`${prefix}:`)) {
+                    log(`📡 ${event}`, 'event');
+                }
+            });
+        });
+
+        document.getElementById('btnClearLog').onclick = () => logContainer.innerHTML = '';
+
+        // ==================== Tab 切换 ====================
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.onclick = () => {
+                document.querySelectorAll('.tab-btn').forEach(b => {
+                    b.classList.remove('text-cyan-300', 'border-b-2', 'border-cyan-400');
+                    b.classList.add('text-slate-400');
+                });
+                btn.classList.add('text-cyan-300', 'border-b-2', 'border-cyan-400');
+                btn.classList.remove('text-slate-400');
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
+                document.querySelector(`[data-tab-content="${btn.dataset.tab}"]`).classList.remove('hidden');
+            };
+        });
+
+        // ==================== 设备管理 ====================
+        const deviceService = new DeviceService(bus, logger);
+        let protocol = null;
+        let keymap = null;
+        let perf = null;
+        let macro = null;
+        const statusBadge = document.getElementById('statusBadge');
+        const btnMock = document.getElementById('btnMock');
+        const btnDisconnect = document.getElementById('btnDisconnect');
+
+        function updateBadge(text, color) {
+            statusBadge.textContent = text;
+            statusBadge.className = `ml-2 px-3 py-1 rounded-full bg-${color}-600/20 text-${color}-400 text-sm`;
+        }
+
+        btnMock.onclick = async () => {
+            try {
+                await deviceService.activateMockMode();
+                protocol = deviceService.getProtocol();
+                keymap = new KeymapService(protocol);
+                perf = new PerformanceService(protocol);
+                macro = new MacroService(protocol);
+                updateBadge('已连接 (模拟)', 'emerald');
+                btnMock.classList.add('hidden');
+                btnDisconnect.classList.remove('hidden');
+                log('✅ 设备已连接 (模拟模式)', 'success');
+                await keymap.listProfiles();
+                renderProfiles();
+                renderMacros();
+            } catch (err) {
+                log('❌ 连接失败: ' + err.message, 'error');
+            }
+        };
+
+        btnDisconnect.onclick = async () => {
+            await deviceService.disconnect();
+            updateBadge('未连接', 'slate');
+            btnMock.classList.remove('hidden');
+            btnDisconnect.classList.add('hidden');
+            keymap = perf = macro = null;
+            log('🔌 设备已断开', 'warn');
+        };
+
+        // ==================== Keymap 功能 ====================
+        const keyOptions = ['Esc', 'Tab', 'Q', 'W', 'E', 'A', 'S', 'D', 'Z', 'X', 'C', 'Space', 'Enter', 'Shift'];
+        const fromKey = document.getElementById('fromKey');
+        const toKey = document.getElementById('toKey');
+        keyOptions.forEach(k => {
+            fromKey.innerHTML += `<option value="${k}">${k}</option>`;
+            toKey.innerHTML += `<option value="${k}">${k}</option>`;
+        });
+
+        document.getElementById('btnRemap').onclick = async () => {
+            if (!keymap) return toast.error('请先连接设备');
+            const from = fromKey.selectedIndex;
+            const to = toKey.selectedIndex;
+            await keymap.remapKey(from, to);
+            toast.success(`${keyOptions[from]} → ${keyOptions[to]}`);
+        };
+
+        document.getElementById('btnReadMatrix').onclick = async () => {
+            if (!keymap) return toast.error('请先连接设备');
+            const matrix = await keymap.readMatrix();
+            log('📊 按键矩阵: ' + matrix.slice(0, 16).join(',') + '...', 'info');
+        };
+
+        function renderProfiles() {
+            const list = document.getElementById('profileList');
+            list.innerHTML = '';
+            (keymap.getProfiles() || []).forEach(p => {
+                const active = p.id === keymap.getCurrentProfile();
+                list.innerHTML += `
+                    <div class="p-3 rounded-lg cursor-pointer transition ${active ? 'bg-cyan-500/20 border border-cyan-500/30' : 'bg-slate-800/50 hover:bg-slate-800'}" data-profile="${p.id}">
+                        <div class="flex items-center justify-between">
+                            <span class="text-sm">${p.name}</span>
+                            ${active ? '<span class="text-xs text-cyan-400">✓ 当前</span>' : ''}
+                        </div>
+                    </div>
+                `;
+            });
+            list.querySelectorAll('[data-profile]').forEach(el => {
+                el.onclick = () => {
+                    list.querySelectorAll('[data-profile]').forEach(e => {
+                        e.classList.remove('bg-cyan-500/20', 'border', 'border-cyan-500/30');
+                        e.classList.add('bg-slate-800/50');
+                    });
+                    el.classList.add('bg-cyan-500/20', 'border', 'border-cyan-500/30');
+                    el.dataset.selected = '1';
+                };
+            });
+        }
+
+        document.getElementById('btnSwitchProfile').onclick = async () => {
+            if (!keymap) return toast.error('请先连接设备');
+            const sel = document.querySelector('[data-profile][data-selected="1"]');
+            if (!sel) return toast.warn('请先选择 Profile');
+            const id = parseInt(sel.dataset.profile);
+            await keymap.switchProfile(id);
+            renderProfiles();
+            toast.success(`已切换到 Profile ${id}`);
+        };
+
+        // ==================== Performance 功能 ====================
+        const dpiSlider = document.getElementById('dpiSlider');
+        const dpiDisplay = document.getElementById('dpiDisplay');
+        const pollingDisplay = document.getElementById('pollingDisplay');
+
+        dpiSlider.oninput = () => dpiDisplay.textContent = dpiSlider.value;
+        dpiSlider.onchange = async () => {
+            if (!perf) return;
+            await perf.setDPI(parseInt(dpiSlider.value));
+            toast.success(`DPI: ${dpiSlider.value}`);
+        };
+
+        document.querySelectorAll('.dpi-level').forEach(btn => {
+            btn.onclick = async () => {
+                if (!perf) return toast.error('请先连接设备');
+                const dpi = parseInt(btn.dataset.dpi);
+                await perf.setDPI(dpi);
+                dpiDisplay.textContent = dpi;
+                dpiSlider.value = dpi;
+                toast.success(`DPI: ${dpi}`);
+            };
+        });
+
+        document.querySelectorAll('.polling-btn').forEach(btn => {
+            btn.onclick = async () => {
+                if (!perf) return toast.error('请先连接设备');
+                const rate = parseInt(btn.dataset.rate);
+                await perf.setPollingRate(rate);
+                pollingDisplay.textContent = rate;
+                toast.success(`轮询率: ${rate} Hz`);
+            };
+        });
+
+        document.querySelectorAll('.lift-btn').forEach(btn => {
+            btn.onclick = async () => {
+                if (!perf) return toast.error('请先连接设备');
+                const h = parseInt(btn.dataset.h);
+                await perf.setLiftHeight(h);
+                document.querySelectorAll('.lift-btn').forEach(b => {
+                    b.classList.remove('bg-cyan-600');
+                    b.classList.add('bg-slate-800');
+                });
+                btn.classList.add('bg-cyan-600');
+                btn.classList.remove('bg-slate-800');
+                toast.success(`抬升: ${h}mm`);
+            };
+        });
+
+        document.getElementById('angleSnapping').onchange = async (e) => {
+            if (!perf) return;
+            await perf.toggleAngleSnapping(e.target.checked);
+            toast.info(`角度吸附: ${e.target.checked ? '开' : '关'}`);
+        };
+
+        document.getElementById('linearCal').onchange = async (e) => {
+            if (!perf) return;
+            await perf.toggleLinearCalibration(e.target.checked);
+            toast.info(`直线修正: ${e.target.checked ? '开' : '关'}`);
+        };
+
+        document.querySelectorAll('.mode-btn').forEach(btn => {
+            btn.onclick = async () => {
+                if (!perf) return toast.error('请先连接设备');
+                const mode = btn.dataset.mode;
+                await perf.setPerformanceMode(mode);
+                document.querySelectorAll('.mode-btn').forEach(b => {
+                    b.classList.remove('bg-cyan-600');
+                    b.classList.add('bg-slate-800');
+                });
+                btn.classList.add('bg-cyan-600');
+                btn.classList.remove('bg-slate-800');
+                toast.success(`模式: ${mode}`);
+            };
+        });
+
+        // ==================== Macro 功能 ====================
+        const btnStartRecord = document.getElementById('btnStartRecord');
+        const btnStopRecord = document.getElementById('btnStopRecord');
+        const recordingStatus = document.getElementById('recordingStatus');
+        const macroSlot = document.getElementById('macroSlot');
+
+        function updateRecordingStatus() {
+            if (!macro) return;
+            const s = macro.getRecordingStatus();
+            if (s.isRecording) {
+                recordingStatus.innerHTML = `
+                    <div class="flex items-center justify-center gap-2 text-rose-400">
+                        <span class="w-3 h-3 bg-rose-500 rounded-full animate-pulse"></span>
+                        录制中 (Slot ${s.currentSlot})
+                    </div>
+                    <div class="text-xs text-slate-400 mt-1">事件数: ${s.eventCount} | 时长: ${(s.duration / 1000).toFixed(1)}s</div>
+                `;
+            } else {
+                recordingStatus.textContent = '未在录制';
+                recordingStatus.className = 'p-3 rounded-lg bg-slate-800/50 text-center text-slate-400 text-sm';
+            }
+        }
+
+        btnStartRecord.onclick = async () => {
+            if (!macro) return toast.error('请先连接设备');
+            await macro.startRecord(parseInt(macroSlot.value));
+            btnStartRecord.disabled = true;
+            btnStopRecord.disabled = false;
+            updateRecordingStatus();
+            setInterval(updateRecordingStatus, 100);
+            toast.warn('⏺ 开始录制');
+        };
+
+        btnStopRecord.onclick = async () => {
+            if (!macro) return;
+            const data = await macro.stopRecord();
+            btnStartRecord.disabled = false;
+            btnStopRecord.disabled = true;
+            updateRecordingStatus();
+            renderMacros();
+            toast.success(`已保存宏: ${data.name} (${data.eventCount} 事件)`);
+        };
+
+        document.querySelectorAll('.capture-btn').forEach(btn => {
+            btn.onclick = () => {
+                if (!macro || !macro.isRecording) return;
+                macro.captureEvent({
+                    keyCode: parseInt(btn.dataset.key),
+                    type: 'down',
+                    delay: 50,
+                });
+                log(`  + 捕获按键 0x${parseInt(btn.dataset.key).toString(16).toUpperCase()}`, 'event');
+            };
+        });
+
+        function renderMacros() {
+            const list = document.getElementById('macroList');
+            if (!list) return;
+            list.innerHTML = '';
+            const macros = macro ? macro.getMacros() : [];
+            if (macros.length === 0) {
+                list.innerHTML = '<div class="text-center text-slate-500 text-sm py-4">暂无宏</div>';
+                return;
+            }
+            macros.forEach(m => {
+                list.innerHTML += `
+                    <div class="p-3 rounded-lg bg-slate-800/50 flex items-center justify-between">
+                        <div>
+                            <div class="text-sm">${m.name}</div>
+                            <div class="text-xs text-slate-400">Slot ${m.slot} | ${m.eventCount || 0} 事件</div>
+                        </div>
+                        <div class="flex gap-1">
+                            <button class="play-macro px-2 py-1 text-xs bg-emerald-600 hover:bg-emerald-500 text-white rounded" data-slot="${m.slot}">▶</button>
+                            <button class="del-macro px-2 py-1 text-xs bg-rose-600 hover:bg-rose-500 text-white rounded" data-slot="${m.slot}">🗑</button>
+                        </div>
+                    </div>
+                `;
+            });
+            list.querySelectorAll('.play-macro').forEach(b => {
+                b.onclick = async () => {
+                    const slot = parseInt(b.dataset.slot);
+                    await macro.play(slot);
+                    toast.success(`播放 Slot ${slot}`);
+                };
+            });
+            list.querySelectorAll('.del-macro').forEach(b => {
+                b.onclick = async () => {
+                    const slot = parseInt(b.dataset.slot);
+                    await macro.deleteMacro(slot);
+                    renderMacros();
+                    toast.info(`删除 Slot ${slot}`);
+                };
+            });
+        }
+    </script>
+</body>
+</html>
