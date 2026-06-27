@@ -174,9 +174,41 @@ export class DeviceService {
                 return null;
             }
 
-            // 过滤键盘接口 (有 OUT 端点)
-            const keyboardDevice = this._findKeyboardInterface(devices);
-            if (!keyboardDevice) {
+            // 遍历设备列表，打开每个设备检查接口类型，过滤出键盘接口
+            const keyboardDevices = [];
+            for (const device of devices) {
+                try {
+                    // 临时打开设备检查接口类型
+                    if (!device.opened) {
+                        await new Promise(resolve => setTimeout(resolve, 500));
+                        await device.open();
+                    }
+
+                    // 检查是否为键盘接口
+                    if (this._isKeyboardInterface(device)) {
+                        keyboardDevices.push(device);
+                        logger.info(`✓ 设备 ${device.productName} 是键盘接口`);
+                    } else {
+                        logger.warn(`✗ 设备 ${device.productName} 是鼠标接口，已过滤`);
+                        // 关闭鼠标接口设备
+                        if (device.opened) {
+                            await device.close();
+                        }
+                    }
+                } catch (err) {
+                    logger.warn(`检查设备 ${device.productName} 失败: ${err.message}`);
+                    // 如果打开失败，关闭设备
+                    try {
+                        if (device.opened) {
+                            await device.close();
+                        }
+                    } catch (closeErr) {
+                        // 忽略关闭错误
+                    }
+                }
+            }
+
+            if (keyboardDevices.length === 0) {
                 const err = new Error('未找到键盘接口，请确保连接的是键盘而非鼠标接口');
                 logger.error(err.message);
                 this._setStatus(DeviceStatus.ERROR);
@@ -184,7 +216,11 @@ export class DeviceService {
                 throw err;
             }
 
-            logger.info(`用户选择了设备: ${keyboardDevice.productName || 'Unknown'}`);
+            // 使用第一个键盘接口设备
+            const keyboardDevice = keyboardDevices[0];
+            logger.info(`用户选择了设备: ${keyboardDevice.productName || 'Unknown'} (已验证为键盘接口)`);
+            
+            // 设备已经打开，直接创建 transport
             return await this._connectDevice(keyboardDevice);
         } catch (err) {
             logger.error(`请求设备失败: ${err.message}`);
