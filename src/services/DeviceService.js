@@ -14,6 +14,7 @@ import { logger } from '../core/Logger.js';
 import { WebHIDTransport } from '../transport/WebHIDTransport.js';
 import { MockTransport } from '../transport/MockTransport.js';
 import { Protocol } from '../protocol/Protocol.js';
+import { CMD } from '../protocol/commands/BaseCommands.js';
 
 /**
  * 设备类型
