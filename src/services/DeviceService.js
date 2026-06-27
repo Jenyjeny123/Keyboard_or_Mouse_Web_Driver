@@ -276,7 +276,18 @@ export class DeviceService {
             // 4. 创建 Protocol (Protocol 内部会接管 transport.onReceive/onError)
             this.protocol = new Protocol(this.transport);
 
-            // 5. 更新状态
+            // 5. 发送 PING 命令验证是否为键盘接口（鼠标接口无 OUT 端点，PING 会失败）
+            try {
+                logger.info('发送 PING 命令验证接口类型...');
+                await this.protocol.send(CMD.PING, [], 0, { timeout: 2000 });
+                logger.info('✓ PING 成功，确认为键盘接口');
+            } catch (pingErr) {
+                logger.error(`✗ PING 失败: ${pingErr.message}`);
+                await this.transport.disconnect();
+                throw new Error('PING 失败，可能是鼠标接口（无 OUT 端点），请选择键盘接口');
+            }
+
+            // 6. 更新状态
             this.mockMode = false;
             this._setStatus(DeviceStatus.CONNECTED);
             logger.info(`设备已连接: ${this.deviceInfo.productName} (${this.deviceType})`);
