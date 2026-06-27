@@ -173,9 +173,19 @@ export class DeviceService {
                 this._setStatus(DeviceStatus.DISCONNECTED);
                 return null;
             }
-            const device = devices[0];
-            logger.info(`用户选择了设备: ${device.productName || 'Unknown'}`);
-            return await this._connectDevice(device);
+
+            // 过滤键盘接口 (有 OUT 端点)
+            const keyboardDevice = this._findKeyboardInterface(devices);
+            if (!keyboardDevice) {
+                const err = new Error('未找到键盘接口，请确保连接的是键盘而非鼠标接口');
+                logger.error(err.message);
+                this._setStatus(DeviceStatus.ERROR);
+                bus.emit('device:error', { error: err });
+                throw err;
+            }
+
+            logger.info(`用户选择了设备: ${keyboardDevice.productName || 'Unknown'}`);
+            return await this._connectDevice(keyboardDevice);
         } catch (err) {
             logger.error(`请求设备失败: ${err.message}`);
             this._setStatus(DeviceStatus.ERROR);
@@ -311,6 +321,35 @@ export class DeviceService {
 
         // 默认根据接口类型判断 (HID 设备细分困难, 默认为键盘)
         return DeviceType.KEYBOARD;
+    }
+
+    /**
+     * 从设备列表中查找键盘接口 (有 OUT 端点)
+     * @param {HIDDevice[]} devices - 设备列表
+     * @returns {HIDDevice|null} - 键盘接口设备或 null
+     */
+    _findKeyboardInterface(devices) {
+        for (const device of devices) {
+            // 检查设备的 collections 来判断接口类型
+            if (device.collections) {
+                for (const collection of device.collections) {
+                    // 键盘: usagePage=0x01 (Generic Desktop), usage=0x06 (Keyboard)
+                    // 鼠标: usagePage=0x01 (Generic Desktop), usage=0x02 (Mouse)
+                    if (collection.usagePage === 0x01 && collection.usage === 0x06) {
+                        logger.info(`找到键盘接口: ${device.productName} (usagePage=0x01, usage=0x06)`);
+                        return device;
+                    }
+                }
+            }
+        }
+
+        // 如果没有找到明确的键盘接口，返回第一个设备（兼容旧设备）
+        if (devices.length > 0) {
+            logger.warn('未找到明确的键盘接口，使用第一个设备');
+            return devices[0];
+        }
+
+        return null;
     }
 
     /**
