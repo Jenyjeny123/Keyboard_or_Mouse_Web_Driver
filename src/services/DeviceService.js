@@ -31,8 +31,8 @@ export const DeviceType = {
  * 实际项目应使用真实的产品 ID
  */
 const KNOWN_DEVICES = {
-    // 示例: 后续接入真实设备时填写
-    // 0x1234: { vendor: 0x1234, product: 0x5678, type: DeviceType.KEYBOARD, name: 'SwiftKey X1' }
+    // SwiftKey X1 键盘
+    '0x320f:0x1234': { vendor: 0x320F, product: 0x1234, type: DeviceType.KEYBOARD, name: 'SwiftKey X1' },
 };
 
 /**
@@ -54,6 +54,7 @@ export class DeviceService {
         this.deviceInfo = null;
         this.deviceType = DeviceType.UNKNOWN;
         this.mockMode = false;
+        this.cachedDevices = [];  // 🆕 缓存搜索到的设备列表
 
         logger.info('DeviceService 已创建');
     }
@@ -104,9 +105,13 @@ export class DeviceService {
         this._setStatus(DeviceStatus.SEARCHING);
         try {
             const devices = await WebHIDTransport.listDevices();
-            logger.info(`找到 ${devices.length} 个已授权设备`);
-            bus.emit('device:search-completed', { devices });
-            return devices;
+            // 过滤目标设备: SwiftKey X1 (VID: 0x320F, PID: 0x1234)
+            this.cachedDevices = devices.filter(d =>
+                d.vendorId === 0x320F && d.productId === 0x1234
+            );
+            logger.info(`找到 ${this.cachedDevices.length} 个 SwiftKey X1 设备 (共 ${devices.length} 个已授权设备)`);
+            bus.emit('device:search-completed', { devices: this.cachedDevices });
+            return this.cachedDevices;
         } catch (err) {
             logger.error(`搜索设备失败: ${err.message}`);
             this._setStatus(DeviceStatus.ERROR);
@@ -116,12 +121,59 @@ export class DeviceService {
     }
 
     /**
-     * 请求设备权限 (弹出选择器)
+     * 从已搜索的设备列表中连接指定设备
+     * @param {number} index 设备在列表中的索引
      */
-    async requestDevice() {
+    async connectFromList(index) {
         this._setStatus(DeviceStatus.CONNECTING);
         try {
-            const device = await WebHIDTransport.requestDevice();
+            // 优先使用缓存的设备列表, 避免重新查询
+            let devices = this.cachedDevices;
+            if (!devices || devices.length === 0) {
+                devices = await WebHIDTransport.listDevices();
+                this.cachedDevices = devices;
+            }
+            if (index < 0 || index >= devices.length) {
+                throw new Error(`设备索引 ${index} 超出范围 (0-${devices.length - 1}), 请重新搜索`);
+            }
+            const device = devices[index];
+            logger.info(`正在连接设备 #${index}: ${device.productName || 'Unknown'} (VID: 0x${(device.vendorId||0).toString(16).padStart(4,'0')}, PID: 0x${(device.productId||0).toString(16).padStart(4,'0')})`);
+            return await this._connectDevice(device);
+        } catch (err) {
+            logger.error(`连接设备失败: ${err.message}`);
+            this._setStatus(DeviceStatus.ERROR);
+            bus.emit('device:error', { error: err });
+            throw err;
+        }
+    }
+
+    /**
+     * 连接指定的 HIDDevice 对象 (供 inline onclick 全局函数调用)
+     * @param {HIDDevice} device - 从 navigator.hid.requestDevice() 获取的设备
+     */
+    async connectDevice(device) {
+        return await this._connectDevice(device);
+    }
+
+    /**
+     * 请求设备权限 (弹出选择器)
+     * @param {HIDDeviceFilter[]} filters - 设备过滤器 (VID/PID)
+     */
+    async requestDevice(filters = null) {
+        this._setStatus(DeviceStatus.CONNECTING);
+        try {
+            // 直接用 navigator.hid.requestDevice() 弹出选择器,
+            // 获取全新的 device 对象 (与原始 index.html 的 directRequestDevice 一致)
+            const deviceFilters = filters || [
+                { vendorId: 0x320F, productId: 0x1234 }
+            ];
+            const devices = await WebHIDTransport.request(deviceFilters);
+            if (devices.length === 0) {
+                // 用户取消了选择器, 静默返回
+                this._setStatus(DeviceStatus.DISCONNECTED);
+                return null;
+            }
+            const device = devices[0];
             logger.info(`用户选择了设备: ${device.productName || 'Unknown'}`);
             return await this._connectDevice(device);
         } catch (err) {
@@ -133,14 +185,19 @@ export class DeviceService {
     }
 
     /**
-     * 直接连接 (用户已选择过)
+     * 直接连接 (用户已选择过, 优先匹配 VID/PID)
      */
     async directConnect() {
         const devices = await this.searchDevices();
         if (devices.length === 0) {
-            throw new Error('没有可用的设备, 请先请求权限');
+            throw new Error('没有可用的设备, 请先点击「直接连接」授权设备');
         }
-        return await this._connectDevice(devices[0]);
+        // 优先匹配 SwiftKey X1 (VID: 0x320F, PID: 0x1234)
+        const target = devices.find(d =>
+            d.vendorId === 0x320F && d.productId === 0x1234
+        ) || devices[0];
+        logger.info(`直接连接目标设备: ${target.productName || 'Unknown'} (VID: 0x${target.vendorId.toString(16).padStart(4,'0')}, PID: 0x${target.productId.toString(16).padStart(4,'0')})`);
+        return await this._connectDevice(target);
     }
 
     /**
@@ -149,9 +206,9 @@ export class DeviceService {
     async _connectDevice(device) {
         this._setStatus(DeviceStatus.CONNECTING);
         try {
-            // 1. 创建 Transport
-            this.transport = new WebHIDTransport(device);
-            await this.transport.connect();
+            // 1. 创建 Transport 并连接设备
+            this.transport = new WebHIDTransport();
+            await this.transport.connect(device);
 
             // 2. 识别设备类型
             this.deviceType = this._detectDeviceType(device);
@@ -163,20 +220,10 @@ export class DeviceService {
                 type: this.deviceType,
             };
 
-            // 3. 创建 Protocol
+            // 3. 创建 Protocol (Protocol 内部会接管 transport.onReceive/onError)
             this.protocol = new Protocol(this.transport);
 
-            // 4. 设置接收监听
-            this.transport.onReceive((data) => {
-                bus.emit('device:data-received', { data });
-            });
-
-            this.transport.onError((err) => {
-                logger.error(`Transport 错误: ${err.message}`);
-                bus.emit('device:error', { error: err });
-            });
-
-            // 5. 更新状态
+            // 4. 更新状态
             this.mockMode = false;
             this._setStatus(DeviceStatus.CONNECTED);
             logger.info(`设备已连接: ${this.deviceInfo.productName} (${this.deviceType})`);
@@ -193,22 +240,34 @@ export class DeviceService {
 
     /**
      * 激活模拟模式 (无设备时使用)
+     * @param {object} options
+     * @param {boolean} options.passthrough - 是否启用透传到真实设备 (Bus Hound 可见)
+     * @param {HIDDevice} options.realDevice - 真实 HID 设备 (透传目标)
      */
-    async activateMockMode() {
+    async activateMockMode(options = {}) {
         this.mockMode = true;
-        this.transport = new MockTransport();
-        await this.transport.connect();  // ← 关键: 先连接
+        // 🆕 支持透传模式: Mock 数据实际通过真实设备发出 (Bus Hound 可见)
+        this.transport = new MockTransport({
+            passthrough: !!options.passthrough,
+            realDevice: options.realDevice || null,
+        });
+        await this.transport.connect();
         this.protocol = new Protocol(this.transport);
         this.deviceType = DeviceType.KEYBOARD; // 默认为键盘
         this.deviceInfo = {
-            vendorId: 0x0000,
-            productId: 0x0001,
-            productName: 'Mock Device',
-            serialNumber: 'MOCK-001',
+            vendorId: options.realDevice?.vendorId || 0x0000,
+            productId: options.realDevice?.productId || 0x0001,
+            productName: options.realDevice?.productName || 'Mock Device',
+            serialNumber: options.realDevice?.serialNumber || 'MOCK-001',
             type: this.deviceType,
+            passthrough: !!options.passthrough,
         };
         this._setStatus(DeviceStatus.CONNECTED);
-        logger.warn('已进入模拟模式 (无真实设备)');
+        if (options.passthrough) {
+            logger.warn('已进入模拟模式 (透传真实设备) - Bus Hound 可见');
+        } else {
+            logger.warn('已进入模拟模式 (无真实设备) - Bus Hound 不可见');
+        }
         bus.emit('device:connected', { deviceInfo: this.deviceInfo, mock: true });
         return this.deviceInfo;
     }

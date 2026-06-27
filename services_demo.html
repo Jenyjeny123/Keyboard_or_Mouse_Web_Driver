@@ -6,7 +6,6 @@
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <title>Services Demo - Keymap/Performance/Macro</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="src/ui/components/components.css">
     <style>
         .glass-panel {
             background: rgba(15, 23, 42, 0.6);
@@ -223,7 +222,7 @@
 
     <script type="module">
         import { EventBus } from './src/core/EventBus.js';
-        import { Logger } from './src/core/Logger.js';
+        import { logger } from './src/core/Logger.js';
         import { Protocol } from './src/protocol/Protocol.js';
         import { MockTransport } from './src/transport/MockTransport.js';
         import { WebHIDTransport } from './src/transport/WebHIDTransport.js';
@@ -231,12 +230,10 @@
         import { KeymapService } from './src/services/KeymapService.js';
         import { PerformanceService } from './src/services/PerformanceService.js';
         import { MacroService } from './src/services/MacroService.js';
-        import { Toast } from './src/ui/components/Toast.js';
+        import { toast } from './src/ui/components/Toast.js';
 
         const bus = new EventBus();
-        const logger = new Logger({ level: 'info' });
-        const toast = new Toast();
-        toast.mount(document.body);
+        // toast 是单例, 无需 mount (内部自动注入)
 
         // ==================== 日志系统 ====================
         const logContainer = document.getElementById('logContainer');
@@ -252,10 +249,10 @@
 
         // 监听所有服务事件
         ['keymap', 'performance', 'macro'].forEach(prefix => {
-            bus.onAny(event => {
-                if (event.startsWith(`${prefix}:`)) {
-                    log(`📡 ${event}`, 'event');
-                }
+            // 简单轮询注册: 监听常见事件
+            ['connected', 'disconnected', 'changed', 'started', 'stopped', 'remapped', 'switched', 'saved', 'deleted', 'listed', 'imported', 'exported'].forEach(suffix => {
+                const event = `${prefix}:${suffix}`;
+                bus.on(event, (data) => log(`📡 ${event}`, 'event'));
             });
         });
 

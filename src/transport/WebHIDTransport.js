@@ -15,6 +15,9 @@ import { logger } from '../core/Logger.js';
 import { bus } from '../core/EventBus.js';
 import { PROTOCOL } from '../core/Config.js';
 
+/** 连接超时时间 (ms) - 设备被占用时 device.open() 会无限挂起 */
+const CONNECT_TIMEOUT = 3000;
+
 export class WebHIDTransport {
   constructor() {
     /** @type {HIDDevice|null} */
@@ -40,14 +43,15 @@ export class WebHIDTransport {
    * @param {HIDDeviceFilter[]} filters 设备过滤器
    * @returns {Promise<HIDDevice[]>}
    */
-  async request(filters = []) {
+  static async request(filters = []) {
     if (!WebHIDTransport.isSupported()) {
       throw new Error('当前浏览器不支持 WebHID API, 请使用 Chrome/Edge');
     }
     try {
-      const devices = await navigator.hid.requestDevice({
-        filters: filters.length > 0 ? filters : undefined,
-      });
+      // filters 必须是数组, 传 undefined 会报错
+      // 当 filters 为空时, 传空数组表示不限制 (让用户选择任意设备)
+      const options = { filters: Array.isArray(filters) ? filters : [] };
+      const devices = await navigator.hid.requestDevice(options);
       logger.info(`用户选择了 ${devices.length} 个设备`);
       return devices;
     } catch (err) {
@@ -60,7 +64,7 @@ export class WebHIDTransport {
    * 列出已授权的设备
    * @returns {Promise<HIDDevice[]>}
    */
-  async listDevices() {
+  static async listDevices() {
     if (!WebHIDTransport.isSupported()) return [];
     return await navigator.hid.getDevices();
   }
@@ -75,9 +79,26 @@ export class WebHIDTransport {
     }
 
     try {
+      logger.info(`准备连接设备: ${device.productName || 'Unknown'} (VID: 0x${(device.vendorId||0).toString(16).padStart(4,'0')}, PID: 0x${(device.productId||0).toString(16).padStart(4,'0')})`);
+      logger.info(`当前 opened 状态: ${device.opened}`);
+
       if (!device.opened) {
-        await device.open();
+        // 等待 500ms 让设备准备就绪 (与原始 index.html 的 directRequestDevice 一致)
+        await new Promise(resolve => setTimeout(resolve, 500));
+        logger.info(`开始打开设备: ${device.productName || 'Unknown'}`);
+
+        // 设备可能被 Bus Hound 等工具占用, device.open() 会无限挂起, 加超时保护
+        await Promise.race([
+          device.open(),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error(
+              `设备打开超时 (${CONNECT_TIMEOUT / 1000}s) — 请检查设备是否被 Bus Hound 或其他工具占用`
+            )), CONNECT_TIMEOUT)
+          ),
+        ]);
         logger.info(`设备已打开: ${device.productName || 'Unknown'}`);
+      } else {
+        logger.info(`设备已经处于打开状态`);
       }
 
       this.device = device;
@@ -92,7 +113,9 @@ export class WebHIDTransport {
 
       return device;
     } catch (err) {
-      logger.error(`连接设备失败: ${err.message}`);
+      logger.error(`连接设备失败: ${err.message} (${err.name})`);
+      // 输出原始错误堆栈便于调试
+      if (err.stack) logger.debug(err.stack);
       throw err;
     }
   }

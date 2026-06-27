@@ -270,19 +270,19 @@ export class TestService {
         try {
             const response = await this.protocol.send(
                 CMD.LOOPBACK_TEST,
-                data,
+                Array.from(data),
                 0,
-                TEST.RESPONSE_TIMEOUT
+                { timeout: TEST.RESPONSE_TIMEOUT }
             );
 
-            result.received = Array.from(response.payload);
+            result.received = Array.from(response.data);
             result.latency = Date.now() - sendTime;
 
             this.stats.totalReceived++;
             this._updateLatency(result.latency);
 
             // 数据对比
-            const compareResult = this._compareData(data, response.payload);
+            const compareResult = this._compareData(data, response.data);
             result.success = compareResult.match;
 
             if (compareResult.match) {
@@ -309,15 +309,16 @@ export class TestService {
 
     /**
      * 数据对比
+     * 设备回显: 收到 N 字节数据 → 返回 [status(1B) + 原数据(NB)]
+     * Protocol 已剥离 status, 所以 received 就是原始数据的回显
      */
     _compareData(sent, received) {
         if (!received || received.length === 0) {
             return { match: false, reason: '无响应数据' };
         }
 
-        // 跳过状态码字节 (第一个字节是状态码)
-        const sentData = sent;
-        const recvData = received.slice(1); // 去除状态码
+        const sentData = Array.from(sent);
+        const recvData = Array.from(received);
 
         if (sentData.length !== recvData.length) {
             return {

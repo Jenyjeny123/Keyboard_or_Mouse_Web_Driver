@@ -1,17 +1,16 @@
 /**
  * LightingService - 灯光控制服务层
  *
- * 职责:
- *   - 封装灯光控制业务逻辑
- *   - 维护灯光状态
- *   - 与设备驱动层通信
- *   - 状态变化通过 EventBus 广播
+ * 协议版本: V2.1
+ * 参考文档: PROTOCOL_V2.1_COMPLETE.md 第 7 节
  *
- * 设计原则:
- *   - 不直接操作 DOM
- *   - 不直接调用 transport
- *   - 通过 protocol 与驱动层交互
- *   - 状态变更通过事件发布
+ * 灯效模式 (0-9):
+ *   0=固定颜色, 1=彩虹呼吸, 2=波浪, 3=旋转点, 4=彗星,
+ *   5=风车, 6=按键涟漪, 7=单色呼吸, 8=星光闪烁, 9=渐变流水
+ *
+ * 亮度 (0-4): 0=全灭, 1=25%, 2=50%, 3=75%, 4=100%
+ * 速度 (0-4): 0=最慢, 1=较慢, 2=中速, 3=较快, 4=最快
+ * 方向 (0-3): 0=正向, 1=反向, 2=双向交替, 3=随机
  */
 
 import { bus } from '../core/EventBus.js';
@@ -20,32 +19,64 @@ import { LIGHTING } from '../core/Config.js';
 import { CMD } from '../protocol/commands/BaseCommands.js';
 
 /**
- * 灯光模式枚举
+ * 灯效模式枚举 (与协议 7.1 节对应)
  */
 export const LightMode = {
-    STATIC: 'static',         // 恒亮
-    BREATHING: 'breathing',   // 呼吸
-    WAVE: 'wave',             // 波浪
-    RIPPLE: 'ripple',         // 波纹
-    REACTIVE: 'reactive',     // 按键响应
-    RAINBOW: 'rainbow',       // 彩虹
-    CUSTOM: 'custom',         // 自定义
-    WEB_CUSTOM: 'web-custom', // Web 驱动
+    SOLID_COLOR: 'solid-color',           // 0 - 固定颜色 (单色常亮)
+    RAINBOW_BREATHING: 'rainbow-breathing', // 1 - 彩虹呼吸 (色相循环+亮度呼吸)
+    WAVE: 'wave',                         // 2 - 波浪 (4组色相错位流动)
+    ROTATING_SPOT: 'rotating-spot',       // 3 - 旋转点 (单点跑马灯)
+    COMET: 'comet',                       // 4 - 彗星 (带尾迹移动点)
+    WINDMILL: 'windmill',                 // 5 - 风车 (4叶片多色旋转)
+    KEY_STATUS: 'key-status',             // 6 - 按键涟漪 (按键触发+渐灭)
+    BREATHING: 'breathing',               // 7 - 单色呼吸 (固定颜色+亮度呼吸)
+    STARLIGHT: 'starlight',               // 8 - 星光闪烁 (伪随机点亮衰减)
+    GRADIENT_FLOW: 'gradient-flow',       // 9 - 渐变流水 (色相渐变流动)
 };
 
 /**
- * 灯光模式代码 (与设备协议对应)
+ * 灯效模式代码 → 协议 mode 值 (0-9)
  */
 const LIGHT_MODE_CODE = {
-    [LightMode.STATIC]: 0x00,
-    [LightMode.BREATHING]: 0x01,
-    [LightMode.WAVE]: 0x02,
-    [LightMode.RIPPLE]: 0x03,
-    [LightMode.REACTIVE]: 0x04,
-    [LightMode.RAINBOW]: 0x05,
-    [LightMode.CUSTOM]: 0x06,
-    [LightMode.WEB_CUSTOM]: 0x07,
+    [LightMode.SOLID_COLOR]: 0,
+    [LightMode.RAINBOW_BREATHING]: 1,
+    [LightMode.WAVE]: 2,
+    [LightMode.ROTATING_SPOT]: 3,
+    [LightMode.COMET]: 4,
+    [LightMode.WINDMILL]: 5,
+    [LightMode.KEY_STATUS]: 6,
+    [LightMode.BREATHING]: 7,
+    [LightMode.STARLIGHT]: 8,
+    [LightMode.GRADIENT_FLOW]: 9,
 };
+
+/**
+ * 反向映射: 模式代码 (0-9) → 模式名称
+ */
+const CODE_TO_MODE = Object.fromEntries(
+    Object.entries(LIGHT_MODE_CODE).map(([name, code]) => [code, name])
+);
+
+/**
+ * 亮度等级说明 (协议 7.2 节)
+ * 0=全灭, 1=25%(64), 2=50%(128), 3=75%(192), 4=100%(255)
+ */
+const BRIGHTNESS_LEVELS = [0, 64, 128, 192, 255];
+
+/**
+ * 亮度标签
+ */
+const BRIGHTNESS_LABELS = ['全灭 (0%)', '低亮 (25%)', '中亮 (50%)', '较高 (75%)', '最亮 (100%)'];
+
+/**
+ * 速度标签
+ */
+const SPEED_LABELS = ['最慢', '较慢', '中速', '较快', '最快'];
+
+/**
+ * 方向标签
+ */
+const DIRECTION_LABELS = ['正向', '反向', '双向交替', '随机'];
 
 export class LightingService {
     /**
@@ -54,11 +85,12 @@ export class LightingService {
     constructor(protocol) {
         this.protocol = protocol;
         this.state = {
-            enabled: false,                    // 总开关
-            mode: LightMode.STATIC,            // 当前模式
+            enabled: true,                     // 总开关
+            mode: LightMode.SOLID_COLOR,       // 当前模式 (默认固定颜色)
             mainColor: { r: 6, g: 182, b: 212 }, // 默认青色
-            brightness: 100,                   // 亮度 0-100
-            speed: 5,                          // 速度 1-10
+            brightness: 4,                     // 亮度 0-4 (协议 7.2 节)
+            speed: 2,                          // 速度 0-4 (协议 7.3 节)
+            direction: 0,                      // 方向 0-3 (协议 7.4 节)
             webControlMode: false,             // Web 驱动模式
             perKeyColors: new Map(),           // 独立按键颜色
             isApplying: false,                 // 正在应用
@@ -83,24 +115,24 @@ export class LightingService {
      * @param {boolean} enabled
      */
     setEnabled(enabled) {
-        const old = this.state.enabled;
         this.state.enabled = enabled;
-        logger.info(`灯光总开关: ${old} -> ${enabled}`);
+        logger.info(`灯光总开关: ${enabled}`);
         bus.emit('lighting:enabled-changed', { enabled });
         return this.applyState();
     }
 
     /**
-     * 设置灯光模式
-     * @param {string} mode - LightMode 枚举
+     * 设置灯效模式
+     * 协议 7.5.2: LED_START [mode, speed, brightness, direction]
+     * @param {string} mode - LightMode 枚举值
      */
     setMode(mode) {
         if (!(mode in LIGHT_MODE_CODE)) {
-            logger.error(`无效的灯光模式: ${mode}`);
+            logger.error(`无效的灯效模式: ${mode}`);
             return Promise.reject(new Error(`Invalid light mode: ${mode}`));
         }
         this.state.mode = mode;
-        logger.info(`灯光模式: ${mode}`);
+        logger.info(`灯效模式: ${mode} (code=${LIGHT_MODE_CODE[mode]})`);
         bus.emit('lighting:mode-changed', { mode });
         return this.applyState();
     }
@@ -119,25 +151,40 @@ export class LightingService {
 
     /**
      * 设置亮度
-     * @param {number} value - 0-100
+     * 协议 7.2 节: brightness 0-4
+     * @param {number} value - 0-4
      */
     setBrightness(value) {
-        const v = Math.max(0, Math.min(100, value));
+        const v = Math.max(0, Math.min(4, Math.round(value)));
         this.state.brightness = v;
-        logger.info(`亮度: ${v}%`);
+        logger.info(`亮度: ${v} (${BRIGHTNESS_LABELS[v]})`);
         bus.emit('lighting:brightness-changed', { brightness: v });
         return this.applyState();
     }
 
     /**
      * 设置速度
-     * @param {number} value - 1-10
+     * 协议 7.3 节: speed 0-4
+     * @param {number} value - 0-4
      */
     setSpeed(value) {
-        const v = Math.max(1, Math.min(10, value));
+        const v = Math.max(0, Math.min(4, Math.round(value)));
         this.state.speed = v;
-        logger.info(`速度: ${v}`);
+        logger.info(`速度: ${v} (${SPEED_LABELS[v]})`);
         bus.emit('lighting:speed-changed', { speed: v });
+        return this.applyState();
+    }
+
+    /**
+     * 设置方向
+     * 协议 7.4 节: direction 0-3
+     * @param {number} value - 0=正向, 1=反向, 2=双向交替, 3=随机
+     */
+    setDirection(value) {
+        const v = Math.max(0, Math.min(3, Math.round(value)));
+        this.state.direction = v;
+        logger.info(`方向: ${v} (${DIRECTION_LABELS[v]})`);
+        bus.emit('lighting:direction-changed', { direction: v });
         return this.applyState();
     }
 
@@ -194,6 +241,16 @@ export class LightingService {
 
     /**
      * 应用当前状态到设备
+     *
+     * 协议 7.5.2: CMD_LED_START (0x0102)
+     *   Payload: [mode, speed, brightness, direction]
+     *   - mode:       0-9
+     *   - speed:      0-4
+     *   - brightness: 0-4
+     *   - direction:  0-3
+     *
+     * 协议 7.5.1: CMD_SWITCH_EFFECT (0x0106)
+     *   Payload: [effect_id]  (仅切换模式)
      */
     async applyState() {
         if (!this.protocol) {
@@ -226,18 +283,63 @@ export class LightingService {
     }
 
     /**
-     * 启动 Web 驱动模式
-     * Web 端实时控制每个 LED
+     * 从设备读取当前灯效状态
+     * 协议 7.5.3: CMD_READ_LED_STATE (0x010A)
+     *   响应 Payload: [status, mode, brightness, speed, direction, is_running]
+     */
+    async readLedState() {
+        if (!this.protocol) {
+            logger.warn('Protocol 未设置');
+            return null;
+        }
+
+        try {
+            const response = await this.protocol.send(CMD.READ_LED_STATE, []);
+            const data = response.data;
+
+            if (data.length >= 5) {
+                const modeCode = data[0];
+                const brightness = data[1];
+                const speed = data[2];
+                const direction = data[3];
+                const isRunning = data[4];
+
+                const mode = CODE_TO_MODE[modeCode] || LightMode.SOLID_COLOR;
+
+                this.state.mode = mode;
+                this.state.brightness = brightness;
+                this.state.speed = speed;
+                this.state.direction = direction;
+                this.state.enabled = isRunning === 1;
+
+                logger.info(`读取灯效状态: mode=${mode}(${modeCode}), brightness=${brightness}, speed=${speed}, direction=${direction}, running=${isRunning}`);
+                bus.emit('lighting:state-read', { mode, brightness, speed, direction, isRunning });
+
+                return { mode, brightness, speed, direction, isRunning };
+            }
+        } catch (err) {
+            logger.error(`读取灯效状态失败: ${err.message}`);
+        }
+        return null;
+    }
+
+    /**
+     * 启动 Web 驱动模式 (自定义逐键控制)
      */
     async startWebControlMode() {
         this.state.webControlMode = true;
-        this.state.mode = LightMode.WEB_CUSTOM;
         this.state.enabled = true;
 
         logger.info('启动 Web 驱动模式');
         bus.emit('lighting:web-mode-started');
 
-        await this.protocol.send(CMD.SWITCH_EFFECT, [LIGHT_MODE_CODE[LightMode.WEB_CUSTOM]]);
+        // 使用 LED_START 设置模式为固定颜色 (mode=0), 后续用 SET_SINGLE_LED 逐键控制
+        await this.protocol.send(CMD.LED_START, [
+            LIGHT_MODE_CODE[LightMode.SOLID_COLOR],
+            this.state.speed,
+            this.state.brightness,
+            this.state.direction
+        ]);
     }
 
     /**
@@ -251,6 +353,7 @@ export class LightingService {
 
     /**
      * 在 Web 驱动模式下设置单 LED
+     * 协议: SET_SINGLE_LED (0x0104) [led_id, r, g, b]
      * @param {number} ledId
      * @param {object} color - {r,g,b}
      */
@@ -279,42 +382,31 @@ export class LightingService {
 
     /**
      * 应用灯光 (内部)
+     *
+     * 协议 7.5.2: LED_START [mode, speed, brightness, direction]
+     *   mode:       0-9  (灯效模式)
+     *   speed:      0-4  (速度档位)
+     *   brightness: 0-4  (亮度档位)
+     *   direction:  0-3  (方向)
      */
     async _applyLighting() {
-        const { mode, mainColor, brightness, speed, perKeyColors } = this.state;
-        const colorHex = this._rgbToHex(mainColor);
+        const { mode, brightness, speed, direction } = this.state;
+        const modeCode = LIGHT_MODE_CODE[mode];
 
-        // 1. 设置 LED 颜色 (批量)
-        if (perKeyColors.size > 0) {
-            // 自定义模式 - 上传所有按键颜色
-            const payload = [];
-            perKeyColors.forEach((color, keyId) => {
-                payload.push(parseInt(keyId), color.r, color.g, color.b);
-            });
-            await this.protocol.send(CMD.WRITE_LED_DEFINE, payload);
-        } else {
-            // 单色模式 - 设置所有 LED 为同一颜色
-            const payload = [];
-            for (let i = 0; i < LIGHTING.LED_COUNT; i++) {
-                payload.push(i, mainColor.r, mainColor.g, mainColor.b);
-            }
-            await this.protocol.send(CMD.WRITE_LED_DEFINE, payload);
-        }
+        // 协议 7.5.2: LED_START [mode, speed, brightness, direction]
+        await this.protocol.send(CMD.LED_START, [
+            modeCode,
+            speed,
+            brightness,
+            direction
+        ]);
 
-        // 2. 切换灯效模式
-        await this.protocol.send(
-            CMD.SWITCH_EFFECT,
-            [LIGHT_MODE_CODE[mode], brightness, speed]
-        );
-
-        // 3. 启动灯效
-        await this.protocol.send(CMD.LED_START, []);
-
-        logger.debug(`应用灯光: 模式=${mode}, 色=${colorHex}, 亮度=${brightness}%, 速度=${speed}`);
+        logger.debug(`应用灯光: mode=${mode}(${modeCode}), speed=${speed}, brightness=${brightness}, direction=${direction}`);
     }
 
     /**
      * 停止灯光 (内部)
+     * 协议: LED_STOP (0x0103) 空
      */
     async _stopLighting() {
         await this.protocol.send(CMD.LED_STOP, []);

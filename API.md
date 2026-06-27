@@ -945,3 +945,312 @@ await lighting.setMainColor('#06b6d4');
 > - [README.md](file:///f:/Coding/Trae_project/WEB/keyboard/keyboard-driver/README.md) - 项目说明
 > - [Protocol_V2.md](file:///f:/Coding/Trae_project/WEB/keyboard/keyboard-driver/Protocol_V2.md) - 通讯协议
 > - [MIGRATION.md](file:///f:/Coding/Trae_project/WEB/keyboard/keyboard-driver/MIGRATION.md) - 迁移指南
+
+---
+
+## 🆕 KeymapService
+
+按键映射管理服务，负责配置文件管理、按键矩阵读写、按键重映射等。
+
+### 构造函数
+```javascript
+new KeymapService(protocol)
+```
+
+### 配置文件管理
+
+| 方法 | 说明 | 返回值 |
+|------|------|--------|
+| `listProfiles()` | 列出所有配置 | `Promise<Array>` |
+| `switchProfile(id)` | 切换配置 (1-4) | `Promise<boolean>` |
+| `saveProfile()` | 保存当前配置 | `Promise<boolean>` |
+| `deleteProfile(id)` | 删除配置 | `Promise<boolean>` |
+| `exportProfile()` | 导出为 JSON | `Promise<object>` |
+| `importProfile(data)` | 从 JSON 导入 | `Promise<boolean>` |
+
+### 按键矩阵
+
+| 方法 | 说明 | 返回值 |
+|------|------|--------|
+| `readMatrix()` | 读取按键矩阵 | `Promise<Uint8Array>` |
+| `writeMatrix(m)` | 写入按键矩阵 | `Promise<boolean>` |
+| `readKeyState()` | 读取按键状态 | `Promise<Array>` |
+
+### 按键重映射
+
+| 方法 | 说明 | 返回值 |
+|------|------|--------|
+| `remapKey(from, to)` | 重映射单个按键 | `Promise<boolean>` |
+| `remapBatch(mappings)` | 批量重映射 | `Promise<boolean>` |
+| `disableKey(keyCode)` | 禁用按键 | `Promise<boolean>` |
+| `comboKey(keys)` | 发送组合键 | `Promise<boolean>` |
+| `fireKey(keyCode)` | 触发单键 | `Promise<boolean>` |
+| `mediaKey(code)` | 媒体键 | `Promise<boolean>` |
+| `systemKey(code)` | 系统键 | `Promise<boolean>` |
+
+### 事件
+
+| 事件 | 触发时机 |
+|------|----------|
+| `keymap:switching` | 切换 Profile 时 |
+| `keymap:switched` | 切换完成 |
+| `keymap:saved` | 保存完成 |
+| `keymap:remapped` | 重映射完成 |
+| `keymap:combo-fired` | 组合键触发 |
+
+### 用法示例
+
+```javascript
+import { KeymapService } from './src/services/KeymapService.js';
+
+const keymap = new KeymapService(protocol);
+
+// 切换配置
+await keymap.switchProfile(1);
+
+// 读取按键矩阵
+const matrix = await keymap.readMatrix();
+console.log('按键矩阵:', matrix);
+
+// 重映射: 将 Q 改为 W
+await keymap.remapKey(0x0A, 0x0B);
+
+// 批量重映射
+await keymap.remapBatch([
+    [0x0A, 0x0B],  // Q -> W
+    [0x0B, 0x0C],  // W -> E
+]);
+
+// 导出配置
+const exported = await keymap.exportProfile();
+const json = JSON.stringify(exported);
+```
+
+---
+
+## 🆕 PerformanceService
+
+性能调节服务，负责 DPI、轮询率、抬升高度、角度吸附等性能参数。
+
+### 构造函数
+```javascript
+new PerformanceService(protocol)
+```
+
+### DPI 控制
+
+| 方法 | 说明 | 范围 |
+|------|------|------|
+| `readDPI()` | 读取当前 DPI | - |
+| `setDPI(dpi)` | 设置 DPI | 100-25600 |
+| `switchDPILevel(level)` | 切换档位 (0-5) | - |
+| `increaseDPI(step)` | 增加 DPI | 默认 100 |
+| `decreaseDPI(step)` | 减少 DPI | 默认 100 |
+
+### 轮询率
+
+| 方法 | 说明 | 支持值 |
+|------|------|--------|
+| `readPollingRate()` | 读取轮询率 | - |
+| `setPollingRate(rate)` | 设置轮询率 (Hz) | 125/250/500/1000/2000/4000/8000 |
+
+### 抬升 & 修正
+
+| 方法 | 说明 | 参数 |
+|------|------|------|
+| `readLiftHeight()` | 读取抬升高度 | - |
+| `setLiftHeight(mm)` | 设置抬升高度 | 1/2/3 mm |
+| `toggleAngleSnapping(b)` | 切换角度吸附 | boolean |
+| `toggleLinearCalibration(b)` | 切换直线修正 | boolean |
+| `toggleRippleCorrection(b)` | 切换波纹修正 | boolean |
+
+### 性能模式
+
+| 方法 | 说明 | 模式 |
+|------|------|------|
+| `setPerformanceMode(m)` | 设置模式 | standard/balanced/gaming |
+| `getPerformanceStats()` | 获取统计 | - |
+
+### 默认 DPI 档位
+
+```javascript
+dpiLevels = [800, 1200, 1600, 2400, 3200, 6400]
+```
+
+### 状态
+
+```javascript
+service.state = {
+    dpi: 1200,
+    dpiMin: 100,
+    dpiMax: 25600,
+    currentDpiLevel: 0,
+    dpiLevels: [800, 1200, 1600, 2400, 3200, 6400],
+    pollingRate: 1000,
+    liftHeight: 2,
+    angleSnapping: false,
+    linearCalibration: false,
+    rippleCorrection: false,
+    moveSync: false,
+    performanceMode: 'balanced',
+}
+```
+
+### 事件
+
+| 事件 | 触发时机 |
+|------|----------|
+| `performance:dpi-changed` | DPI 变化 |
+| `performance:polling-changed` | 轮询率变化 |
+| `performance:lift-changed` | 抬升高度变化 |
+| `performance:angle-toggled` | 角度吸附切换 |
+| `performance:mode-changed` | 性能模式变化 |
+
+### 用法示例
+
+```javascript
+import { PerformanceService } from './src/services/PerformanceService.js';
+
+const perf = new PerformanceService(protocol);
+
+// 设置 DPI
+await perf.setDPI(1600);
+
+// 切换轮询率
+await perf.setPollingRate(1000);
+
+// 切换档位
+await perf.switchDPILevel(2);  // 1600 DPI
+
+// 开启角度吸附
+await perf.toggleAngleSnapping(true);
+
+// 设置游戏模式
+await perf.setPerformanceMode('gaming');
+
+// 监听变化
+bus.on('performance:dpi-changed', ({ dpi }) => {
+    console.log('DPI 已变更为:', dpi);
+});
+```
+
+---
+
+## 🆕 MacroService
+
+宏录制/播放服务，负责宏的录制、播放、保存、加载、删除。
+
+### 构造函数
+```javascript
+new MacroService(protocol)
+```
+
+### 录制
+
+| 方法 | 说明 | 参数 |
+|------|------|------|
+| `startRecord(slot, name)` | 开始录制 | slot: 0x01-0x10, name? |
+| `stopRecord()` | 停止并保存 | - |
+| `cancelRecord()` | 取消录制 (不保存) | - |
+| `captureEvent(event)` | 手动添加事件 | {keyCode, type, delay} |
+
+### 播放
+
+| 方法 | 说明 | 参数 |
+|------|------|------|
+| `play(slot, repeat)` | 播放宏 | slot, repeat=1 (0=无限) |
+| `stopPlay()` | 停止播放 | - |
+
+### 宏数据管理
+
+| 方法 | 说明 | 返回值 |
+|------|------|--------|
+| `writeMacroData(slot, data)` | 写入宏到设备 | `Promise<boolean>` |
+| `readMacroData(slot)` | 读取宏 | `Promise<object>` |
+| `listMacros()` | 列出所有宏 | `Promise<Array>` |
+| `deleteMacro(slot)` | 删除宏 | `Promise<boolean>` |
+| `exportMacro(slot)` | 导出宏 | `Promise<object>` |
+| `importMacro(slot, data)` | 导入宏 | `Promise<boolean>` |
+
+### 状态查询
+
+| 方法 | 说明 |
+|------|------|
+| `getRecordingStatus()` | 获取录制状态 |
+| `getMacros()` | 获取宏列表 |
+
+### 宏数据结构
+
+```javascript
+{
+    slot: 0x01,            // 槽位
+    name: 'My Macro',      // 名称
+    events: [              // 事件序列
+        { keyCode: 0x04, type: 'down', delay: 50, timestamp: 0 },
+        { keyCode: 0x04, type: 'up',   delay: 100, timestamp: 100 },
+        ...
+    ],
+    duration: 5000,        // 总时长 (ms)
+    eventCount: 10,        // 事件数
+}
+```
+
+### 事件
+
+| 事件 | 触发时机 |
+|------|----------|
+| `macro:recording-started` | 开始录制 |
+| `macro:recording-stopped` | 停止录制 |
+| `macro:recording-cancelled` | 取消录制 |
+| `macro:event-recorded` | 捕获到事件 |
+| `macro:playing-started` | 开始播放 |
+| `macro:playing-stopped` | 停止播放 |
+| `macro:listed` | 列出宏 |
+| `macro:deleted` | 删除宏 |
+
+### 用法示例
+
+```javascript
+import { MacroService } from './src/services/MacroService.js';
+
+const macro = new MacroService(protocol);
+
+// 1. 开始录制
+await macro.startRecord(0x01, 'My Combo');
+
+// 2. 模拟捕获按键 (实际使用时从键盘事件)
+macro.captureEvent({ keyCode: 0x04, type: 'down', delay: 50 });  // A down
+macro.captureEvent({ keyCode: 0x04, type: 'up',   delay: 50 });  // A up
+macro.captureEvent({ keyCode: 0x05, type: 'down', delay: 50 });  // B down
+macro.captureEvent({ keyCode: 0x05, type: 'up',   delay: 50 });  // B up
+
+// 3. 停止并保存
+const saved = await macro.stopRecord();
+console.log('已保存宏:', saved);
+
+// 4. 列出所有宏
+const macros = await macro.listMacros();
+
+// 5. 播放宏
+await macro.play(0x01);
+
+// 6. 删除宏
+await macro.deleteMacro(0x01);
+
+// 7. 监听录制事件
+bus.on('macro:event-recorded', ({ count, event }) => {
+    console.log(`已捕获 ${count} 个事件:`, event);
+});
+```
+
+---
+
+## 📊 3 个新服务对比
+
+| 维度 | KeymapService | PerformanceService | MacroService |
+|------|---------------|--------------------|--------------| 
+| **类别码** | 0x02 + 0x06 | 0x03 | 0x02 |
+| **核心命令** | REMAP_KEY, SWITCH_PROFILE | WRITE_DPI, WRITE_POLL_RATE | MACRO_RECORD_*, EXEC_MACRO |
+| **状态持久化** | 矩阵 128 字节 | DPI + 轮询率等 | 宏数据分片 |
+| **事件数** | 5+ | 5+ | 8+ |
+| **复杂度** | ⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐⭐ |

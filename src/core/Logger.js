@@ -148,6 +148,11 @@ class Logger {
 }
 
 /**
+ * 导出 Logger 类 (供需要自定义实例的模块使用)
+ */
+export { Logger };
+
+/**
  * 全局日志器单例
  */
 export const logger = new Logger();
