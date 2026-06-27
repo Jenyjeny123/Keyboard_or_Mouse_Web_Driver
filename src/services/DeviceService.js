@@ -106,10 +106,46 @@ export class DeviceService {
         try {
             const devices = await WebHIDTransport.listDevices();
             // 过滤目标设备: SwiftKey X1 (VID: 0x320F, PID: 0x1234)
-            this.cachedDevices = devices.filter(d =>
+            const targetDevices = devices.filter(d =>
                 d.vendorId === 0x320F && d.productId === 0x1234
             );
-            logger.info(`找到 ${this.cachedDevices.length} 个 SwiftKey X1 设备 (共 ${devices.length} 个已授权设备)`);
+            logger.info(`找到 ${targetDevices.length} 个 SwiftKey X1 设备 (共 ${devices.length} 个已授权设备)`);
+
+            // 进一步过滤：只保留键盘接口（打开设备检查接口类型）
+            this.cachedDevices = [];
+            for (const device of targetDevices) {
+                try {
+                    // 临时打开设备检查接口类型
+                    if (!device.opened) {
+                        await new Promise(resolve => setTimeout(resolve, 500));
+                        await device.open();
+                    }
+
+                    // 检查是否为键盘接口
+                    if (this._isKeyboardInterface(device)) {
+                        this.cachedDevices.push(device);
+                        logger.info(`✓ 设备 ${device.productName} 是键盘接口`);
+                    } else {
+                        logger.warn(`✗ 设备 ${device.productName} 是鼠标接口，已过滤`);
+                    }
+
+                    // 关闭设备（稍后连接时会重新打开）
+                    if (device.opened) {
+                        await device.close();
+                    }
+                } catch (err) {
+                    logger.warn(`检查设备 ${device.productName} 失败: ${err.message}`);
+                    try {
+                        if (device.opened) {
+                            await device.close();
+                        }
+                    } catch (closeErr) {
+                        // 忽略关闭错误
+                    }
+                }
+            }
+
+            logger.info(`过滤后保留 ${this.cachedDevices.length} 个键盘接口设备`);
             bus.emit('device:search-completed', { devices: this.cachedDevices });
             return this.cachedDevices;
         } catch (err) {
