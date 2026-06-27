@@ -343,12 +343,8 @@ export class DeviceService {
             }
         }
 
-        // 如果没有找到明确的键盘接口，返回第一个设备（兼容旧设备）
-        if (devices.length > 0) {
-            logger.warn('未找到明确的键盘接口，使用第一个设备');
-            return devices[0];
-        }
-
+        // 未找到键盘接口，返回 null（不再回退到第一个设备，避免连接到鼠标接口）
+        logger.warn('未找到键盘接口 (usagePage=0x01, usage=0x06)');
         return null;
     }
 
