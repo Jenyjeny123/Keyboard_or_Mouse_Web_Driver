@@ -112,41 +112,11 @@ export class DeviceService {
             );
             logger.info(`找到 ${targetDevices.length} 个 SwiftKey X1 设备 (共 ${devices.length} 个已授权设备)`);
 
-            // 进一步过滤：只保留键盘接口（打开设备检查接口类型）
-            this.cachedDevices = [];
-            for (const device of targetDevices) {
-                try {
-                    // 临时打开设备检查接口类型
-                    if (!device.opened) {
-                        await new Promise(resolve => setTimeout(resolve, 500));
-                        await device.open();
-                    }
+            // 直接缓存所有匹配 VID/PID 的设备，不打开检查接口类型
+            // 连接时会通过 PING 验证接口类型（鼠标接口无 OUT 端点，PING 会失败）
+            this.cachedDevices = targetDevices;
 
-                    // 检查是否为键盘接口
-                    if (this._isKeyboardInterface(device)) {
-                        this.cachedDevices.push(device);
-                        logger.info(`✓ 设备 ${device.productName} 是键盘接口`);
-                    } else {
-                        logger.warn(`✗ 设备 ${device.productName} 是鼠标接口，已过滤`);
-                    }
-
-                    // 关闭设备（稍后连接时会重新打开）
-                    if (device.opened) {
-                        await device.close();
-                    }
-                } catch (err) {
-                    logger.warn(`检查设备 ${device.productName} 失败: ${err.message}`);
-                    try {
-                        if (device.opened) {
-                            await device.close();
-                        }
-                    } catch (closeErr) {
-                        // 忽略关闭错误
-                    }
-                }
-            }
-
-            logger.info(`过滤后保留 ${this.cachedDevices.length} 个键盘接口设备`);
+            logger.info(`保留 ${this.cachedDevices.length} 个设备`);
             bus.emit('device:search-completed', { devices: this.cachedDevices });
             return this.cachedDevices;
         } catch (err) {
@@ -293,14 +263,7 @@ export class DeviceService {
             this.transport = new WebHIDTransport();
             await this.transport.connect(device);
 
-            // 2. 设备打开后，验证接口类型（键盘 vs 鼠标）
-            if (!this._isKeyboardInterface(device)) {
-                logger.error(`检测到鼠标接口，正在关闭设备...`);
-                await this.transport.disconnect();
-                throw new Error('连接的是鼠标接口，请选择键盘接口');
-            }
-
-            // 3. 识别设备类型
+            // 2. 识别设备类型
             this.deviceType = this._detectDeviceType(device);
             this.deviceInfo = {
                 vendorId: device.vendorId,
@@ -310,18 +273,18 @@ export class DeviceService {
                 type: this.deviceType,
             };
 
-            // 4. 创建 Protocol (Protocol 内部会接管 transport.onReceive/onError)
+            // 3. 创建 Protocol (Protocol 内部会接管 transport.onReceive/onError)
             this.protocol = new Protocol(this.transport);
 
-            // 5. 发送 PING 命令验证是否为键盘接口（鼠标接口无 OUT 端点，PING 会失败）
+            // 4. 发送 PING 命令验证接口是否可用（鼠标接口无 OUT 端点，PING 会失败）
             try {
                 logger.info('发送 PING 命令验证接口类型...');
                 await this.protocol.send(CMD.PING, [], 0, { timeout: 2000 });
-                logger.info('✓ PING 成功，确认为键盘接口');
+                logger.info('✓ PING 成功，确认为可用键盘接口');
             } catch (pingErr) {
                 logger.error(`✗ PING 失败: ${pingErr.message}`);
                 await this.transport.disconnect();
-                throw new Error('PING 失败，可能是鼠标接口（无 OUT 端点），请选择键盘接口');
+                throw new Error('PING 失败，该接口无 OUT 端点（可能是鼠标接口），请尝试连接另一个接口');
             }
 
             // 6. 更新状态
@@ -486,67 +449,77 @@ export class DeviceService {
     }
 
     /**
-     * 验证单个设备是否为键盘接口 (在设备打开后调用)
+     * 递归检查 collections 是否包含 inputReports
+     */
+    _hasInputReports(collections) {
+        for (const c of collections) {
+            if (c.inputReports && c.inputReports.length > 0) return true;
+            if (c.children && this._hasInputReports(c.children)) return true;
+        }
+        return false;
+    }
+
+    /**
+     * 递归检查 collections 是否包含 outputReports
+     */
+    _hasOutputReports(collections) {
+        for (const c of collections) {
+            if (c.outputReports && c.outputReports.length > 0) return true;
+            if (c.children && this._hasOutputReports(c.children)) return true;
+        }
+        return false;
+    }
+
+    /**
+     * 递归检查 collections 是否包含指定 usage
+     */
+    _hasUsage(collections, usagePage, usage) {
+        for (const c of collections) {
+            if (c.usagePage === usagePage && c.usage === usage) return true;
+            if (c.children && this._hasUsage(c.children, usagePage, usage)) return true;
+        }
+        return false;
+    }
+
+    /**
+     * 验证单个设备是否为可用的键盘接口 (在设备打开后调用)
+     * 关键要求：必须同时拥有 IN 端点 (inputReports) 和 OUT 端点 (outputReports)
      * @param {HIDDevice} device - 已打开的设备
-     * @returns {boolean} - true=键盘接口, false=鼠标接口
+     * @returns {boolean} - true=可用的键盘接口, false=不可用的接口
      */
     _isKeyboardInterface(device) {
         logger.info(`验证接口类型: ${device.productName}`);
         logger.info(`  opened=${device.opened}`);
-        logger.info(`  collections=${JSON.stringify((device.collections || []).map(c => ({
-            usagePage: '0x' + (c.usagePage || 0).toString(16),
-            usage: '0x' + (c.usage || 0).toString(16),
-            outputReports: c.outputReports?.length ?? 0,
-        })))}`);
+        logger.info(`  collections=${JSON.stringify(device.collections || [], null, 2)}`);
 
         if (!device.collections || device.collections.length === 0) {
-            // 如果没有 collections 信息，无法判断，返回 false
             logger.warn('无 collections 信息，无法判断接口类型');
             return false;
         }
 
-        let isKeyboard = false;
-        let isMouse = false;
-        let hasOutput = false;
+        // 递归检查所有层级的 collections
+        const hasInput = this._hasInputReports(device.collections);
+        const hasOutput = this._hasOutputReports(device.collections);
+        const isKeyboardUsage = this._hasUsage(device.collections, 0x01, 0x06);
+        const isMouseUsage = this._hasUsage(device.collections, 0x01, 0x02);
 
-        for (const collection of device.collections) {
-            // 键盘: usagePage=0x01, usage=0x06
-            if (collection.usagePage === 0x01 && collection.usage === 0x06) {
-                isKeyboard = true;
-            }
-            // 鼠标: usagePage=0x01, usage=0x02
-            if (collection.usagePage === 0x01 && collection.usage === 0x02) {
-                isMouse = true;
-            }
-            // 有 outputReports 说明有 OUT 端点
-            if (collection.outputReports && collection.outputReports.length > 0) {
-                hasOutput = true;
-            }
+        logger.info(`  hasInput=${hasInput}, hasOutput=${hasOutput}, isKeyboardUsage=${isKeyboardUsage}, isMouseUsage=${isMouseUsage}`);
+
+        // 核心要求：必须同时拥有 IN 和 OUT 端点
+        if (!hasInput || !hasOutput) {
+            logger.warn(`接口缺少必要端点 (IN=${hasInput}, OUT=${hasOutput})，不可用`);
+            return false;
         }
 
-        logger.info(`  isKeyboard=${isKeyboard}, isMouse=${isMouse}, hasOutput=${hasOutput}`);
-
-        // 明确的鼠标接口，返回 false
-        if (isMouse && !isKeyboard) {
+        // 明确的鼠标接口（有 IN+OUT 但是鼠标），返回 false
+        if (isMouseUsage && !isKeyboardUsage) {
             logger.warn('检测到鼠标接口 (usagePage=0x01, usage=0x02)');
             return false;
         }
 
-        // 明确的键盘接口，返回 true
-        if (isKeyboard) {
-            logger.info('检测到键盘接口 (usagePage=0x01, usage=0x06)');
-            return true;
-        }
-
-        // 有 OUT 端点，可能是键盘接口
-        if (hasOutput) {
-            logger.info('检测到有 OUT 端点的设备，认为是键盘接口');
-            return true;
-        }
-
-        // 无法判断，返回 false
-        logger.warn('无法判断接口类型，默认认为不是键盘接口');
-        return false;
+        // 有 IN+OUT 端点且不是纯鼠标接口，认为是可用的键盘接口
+        logger.info('✓ 接口拥有 IN+OUT 端点，确认为可用键盘接口');
+        return true;
     }
 
     /**

@@ -138,14 +138,33 @@ export class LightingService {
     }
 
     /**
-     * 设置主色调
+     * 设置预设颜色 (固件内置颜色)
+     * 协议 7.5.2: 通过 LED_START 的 color 参数 (0-8) 传递
+     * @param {number} index - 颜色索引 0-8
+     */
+    async setPresetColor(index) {
+        if (index < 0 || index > 8) {
+            logger.warn(`预设颜色索引无效: ${index}，应为 0-8`);
+            return;
+        }
+        this.state.colorIndex = index;
+        logger.info(`设置预设颜色: ${index}`);
+        bus.emit('lighting:color-changed', { index });
+        return this.applyState();
+    }
+
+    /**
+     * 设置自定义颜色 (Web 驱动颜色)
+     * 协议 7.5.3: SET_CUSTOM_COLOR (0x010F) [r, g, b]
+     * 然后 LED_START 带 color=9
      * @param {string|object} color - '#RRGGBB' 或 {r,g,b}
      */
-    setMainColor(color) {
+    async setMainColor(color) {
         const rgb = this._parseColor(color);
         this.state.mainColor = rgb;
-        logger.info(`主色调: rgb(${rgb.r}, ${rgb.g}, ${rgb.b})`);
-        bus.emit('lighting:color-changed', { color: rgb });
+        this.state.colorIndex = 9; // 标记为自定义颜色模式
+        logger.info(`自定义颜色: rgb(${rgb.r}, ${rgb.g}, ${rgb.b})`);
+        bus.emit('lighting:color-changed', { color: rgb, index: 9 });
         return this.applyState();
     }
 
@@ -269,6 +288,7 @@ export class LightingService {
             if (!this.state.enabled) {
                 await this._stopLighting();
             } else {
+                // 发送灯效参数（包含颜色索引）
                 await this._applyLighting();
             }
             bus.emit('lighting:applied', { state: this.getState() });
@@ -383,25 +403,37 @@ export class LightingService {
     /**
      * 应用灯光 (内部)
      *
-     * 协议 7.5.2: LED_START [mode, speed, brightness, direction]
+     * 协议 7.5.2: LED_START [mode, speed, brightness, direction, color]
      *   mode:       0-9  (灯效模式)
      *   speed:      0-4  (速度档位)
      *   brightness: 0-4  (亮度档位)
      *   direction:  0-3  (方向)
+     *   color:      0-9  (颜色索引, 0-8预设, 9自定义)
      */
     async _applyLighting() {
-        const { mode, brightness, speed, direction } = this.state;
+        const { mode, brightness, speed, direction, colorIndex, mainColor } = this.state;
         const modeCode = LIGHT_MODE_CODE[mode];
 
-        // 协议 7.5.2: LED_START [mode, speed, brightness, direction]
+        // 如果是自定义颜色 (colorIndex=9)，先发送 SET_CUSTOM_COLOR
+        if (colorIndex === 9 && mainColor) {
+            await this.protocol.send(CMD.SET_CUSTOM_COLOR, [
+                mainColor.r,
+                mainColor.g,
+                mainColor.b
+            ]);
+            logger.debug(`设置自定义颜色: rgb(${mainColor.r}, ${mainColor.g}, ${mainColor.b})`);
+        }
+
+        // 协议 7.5.2: LED_START [mode, speed, brightness, direction, color]
         await this.protocol.send(CMD.LED_START, [
             modeCode,
             speed,
             brightness,
-            direction
+            direction,
+            colorIndex
         ]);
 
-        logger.debug(`应用灯光: mode=${mode}(${modeCode}), speed=${speed}, brightness=${brightness}, direction=${direction}`);
+        logger.debug(`应用灯光: mode=${mode}(${modeCode}), speed=${speed}, brightness=${brightness}, direction=${direction}, color=${colorIndex}`);
     }
 
     /**

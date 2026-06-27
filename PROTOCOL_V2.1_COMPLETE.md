@@ -98,6 +98,7 @@ CMD 为 2 字节 (uint16, 小端序): **高字节 = 类别码**, **低字节 = �
 | `0x010C` | LED_SYNC | `[sync_group, role]` | `[status]` |
 | `0x010D` | SCREEN_COLOR_CONFIG | `[mode, speed, sample_area_x, sample_area_y, brightness]` | `[status]` |
 | `0x010E` | AUDIO_REACTIVE_CONFIG | `[sensitivity, channel, color_mode]` | `[status]` |
+| `0x010F` | SET_CUSTOM_COLOR | `[r, g, b]` | `[status]` |
 
 #### 按键类 (0x02xx)
 | CMD | 名称 | 请求 Payload | 响应 Payload |
@@ -596,11 +597,12 @@ Device → Web:  04 06 01 01 00 00 01 00 00
 #### 7.5.2 CMD_LED_START (0x0102) — 设置灯效全部参数
 
 ```
-请求 Payload (4 bytes):
+请求 Payload (4-5 bytes):
   [0] mode        (0-9)  — 灯效模式
   [1] speed       (0-4)  — 播放速度档位
   [2] brightness  (0-4)  — 亮度档位
   [3] direction   (0-3)  — 方向
+  [4] color       (0-8)  — 颜色索引（可选，不传则保持当前颜色）
 
 响应 Payload:
   [0] status — 0x00=成功, 0x03=参数无效
@@ -628,7 +630,20 @@ Device → Web:  04 06 01 01 00 00 01 00 00
 - 2: 双向交替
 - 3: 随机
 
-**示例**: 设置 mode=2(波浪), speed=3(较快), brightness=4(最亮), direction=0(正向)
+**color (0-8)** — 颜色索引:
+| 值 | 颜色 | RGB |
+|----|------|-----|
+| 0 | 红色 | (255, 0, 0) |
+| 1 | 绿色 | (0, 255, 0) |
+| 2 | 蓝色 | (0, 0, 255) |
+| 3 | 黄色 | (255, 255, 0) |
+| 4 | 青色 | (0, 255, 255) |
+| 5 | 品红 | (255, 0, 255) |
+| 6 | 白色 | (255, 255, 255) |
+| 7 | 橙色 | (255, 128, 0) |
+| 8 | 彩虹 | 循环变色 |
+
+**示例 1**: 设置 mode=2(波浪), speed=3(较快), brightness=4(最亮), direction=0(正向)
 ```
 Web → Device:  04 02 01 04 00 00 04 00 02 03 04 00
                RPT CMD=0x0102 LEN=4 DATA=[mode=2, speed=3, brightness=4, direction=0]
@@ -637,7 +652,96 @@ Device → Web:  04 02 01 01 00 00 01 00 00
                RPT CMD=0x0102 LEN=1 STATUS=SUCCESS
 ```
 
-#### 7.5.3 CMD_READ_LED_STATE (0x010A) — 读取当前灯效状态
+**示例 2**: 设置 mode=0(固定颜色), speed=2, brightness=4, direction=0, color=2(蓝色)
+```
+Web → Device:  04 02 01 05 00 00 05 00 00 02 04 00 02
+               RPT CMD=0x0102 LEN=5 DATA=[mode=0, speed=2, brightness=4, direction=0, color=2]
+
+Device → Web:  04 02 01 01 00 00 01 00 00
+               RPT CMD=0x0102 LEN=1 STATUS=SUCCESS
+```
+
+**⚠️ 注意**: `color` 参数必须通过 `LED_START` 命令传递。`SET_SINGLE_LED` (0x0104) 命令当前未实现，会返回 `NOT_SUPPORTED`。
+
+---
+
+### 7.5.2.1 颜色切换完整指南
+
+驱动切换颜色应使用以下命令：
+
+| 目标颜色 | 命令序列 | 示例数据包 |
+|---------|---------|-----------|
+| 固定颜色 (0-7) | 单次 `LED_START` 带 color 参数 | `04 02 01 05 00 00 05 00 00 02 04 00 02` (color=2 蓝色) |
+| 彩虹循环 (8) | 单次 `LED_START` 带 color=8 | `04 02 01 05 00 00 05 00 00 02 04 00 08` |
+| 自定义颜色 (9) | 先 `SET_CUSTOM_COLOR` 设置 RGB，再 `LED_START` 带 color=9 | 见下方完整示例 |
+
+**完整示例：切换到自定义颜色**
+
+```
+步骤 1: 设置自定义颜色 RGB 值 (紫色: R=255, G=0, B=255)
+Web → Device:  04 0F 01 03 00 00 03 00 FF 00 FF
+               RPT CMD=0x010F LEN=3 DATA=[R=255, G=0, B=255]
+
+Device → Web:  04 0F 01 01 00 00 01 00 00
+               RPT CMD=0x010F LEN=1 STATUS=SUCCESS
+
+步骤 2: 启动灯效并切换到自定义颜色模式 (color=9)
+Web → Device:  04 02 01 05 00 00 05 00 00 04 00 09
+               RPT CMD=0x0102 LEN=5 DATA=[mode=0, speed=2, brightness=4, direction=0, color=9]
+
+Device → Web:  04 02 01 01 00 00 01 00 00
+               RPT CMD=0x0102 LEN=1 STATUS=SUCCESS
+```
+
+> **重要**:
+> - `LED_START` 的 `LEN` 必须为 5 才能切换颜色
+> - 如果 `LEN=4`（不带 color 参数），颜色保持不变
+> - 自定义颜色值立即生效，但只有在 `color=9` 时才会被使用
+
+#### 7.5.3 CMD_SET_CUSTOM_COLOR (0x010F) — 设置自定义颜色
+
+用于设置第 10 种颜色模式（索引 9）的 RGB 值，允许 Web 驱动动态调整灯效颜色。
+
+```
+请求 Payload (3 bytes):
+  [0] r — 红色分量 (0-255)
+  [1] g — 绿色分量 (0-255)
+  [2] b — 蓝色分量 (0-255)
+
+响应 Payload:
+  [0] status — 0x00=成功, 0x05=长度错误
+```
+
+**使用流程**:
+
+1. **设置自定义颜色**: 发送 `SET_CUSTOM_COLOR` 命令写入 RGB 值
+2. **切换到自定义颜色模式**: 在 `LED_START` 命令中设置 `color=9`
+
+**示例**: 设置自定义颜色为紫色 (255, 0, 255)，并应用到固定颜色模式
+
+```
+步骤 1: 设置自定义颜色为紫色
+Web → Device:  04 0F 01 03 00 00 03 00 FF 00 FF
+               RPT CMD=0x010F LEN=3 DATA=[R=255, G=0, B=255]
+
+Device → Web:  04 0F 01 01 00 00 01 00 00
+               RPT CMD=0x010F LEN=1 STATUS=SUCCESS
+
+步骤 2: 切换到固定颜色模式，使用自定义颜色 (color=9)
+Web → Device:  04 02 01 05 00 00 05 00 00 02 04 00 09
+               RPT CMD=0x0102 LEN=5 DATA=[mode=0, speed=2, brightness=4, direction=0, color=9]
+
+Device → Web:  04 02 01 01 00 00 01 00 00
+               RPT CMD=0x0102 LEN=1 STATUS=SUCCESS
+```
+
+**注意事项**:
+- 自定义颜色值会立即生效，无需重启设备
+- 颜色值存储在设备内存中，断电后会恢复为默认值 (白色 255,255,255)
+- 可在任何灯效模式下使用 `color=9` 切换到自定义颜色
+- 修改自定义颜色后，如果当前已在使用 `color=9`，灯效会立即更新
+
+#### 7.5.4 CMD_READ_LED_STATE (0x010A) — 读取当前灯效状态
 
 ```
 请求 Payload: 空

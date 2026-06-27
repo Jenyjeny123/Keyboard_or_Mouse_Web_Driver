@@ -71,6 +71,7 @@ export const CMD = {
   LED_SYNC:                C(0x01, 0x0C),
   SCREEN_COLOR_CONFIG:     C(0x01, 0x0D),
   AUDIO_REACTIVE_CONFIG:   C(0x01, 0x0E),
+  SET_CUSTOM_COLOR:        C(0x01, 0x0F),
 
   // ============ 按键类 (0x02xx) ============
   READ_MATRIX:         C(0x02, 0x00),

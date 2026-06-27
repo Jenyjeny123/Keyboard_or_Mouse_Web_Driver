@@ -72,8 +72,45 @@
             grid-column: 4;
             height: 100%;
         }
-        .led { width: 8px; height: 8px; border-radius: 50%; display: inline-block; transition: all 0.2s; }
-        .led.on { box-shadow: 0 0 8px currentColor; }
+        /* LED 键盘布局 */
+        #ledKeymapGrid {
+            display: grid;
+            grid-template-columns: repeat(4, 4rem);
+            grid-template-rows: repeat(4, 3.5rem);
+            gap: 0.625rem;
+            width: fit-content;
+            margin: 0 auto;
+        }
+        .led-key {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #1e293b;
+            box-shadow:
+                0 4px 6px -1px rgba(0, 0, 0, 0.5),
+                0 2px 4px -1px rgba(0, 0, 0, 0.3),
+                inset 0 1px 0 rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(71, 85, 105, 0.3);
+            border-radius: 0.5rem;
+            font-family: monospace;
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: rgba(255, 255, 255, 0.9);
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+        }
+        .led-key:hover {
+            transform: translateY(-2px);
+            box-shadow:
+                0 8px 15px -5px rgba(0, 0, 0, 0.6),
+                0 0 15px rgba(6, 182, 212, 0.3);
+        }
+        .led-key.enter-key {
+            grid-row: 3 / 5;
+            grid-column: 4;
+            height: 100%;
+        }
         input[type="range"].slider {
             -webkit-appearance: none; appearance: none; background: transparent;
         }
@@ -205,10 +242,13 @@
 
             <!-- 灯光控制 Tab -->
             <div data-tab="lighting" class="space-y-6 hidden">
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div id="lightingControlPanel"></div>
-                    <div id="lightingVisualPanel"></div>
+                <!-- LED 预览 + 颜色选择 左右布局 -->
+                <div class="flex gap-4 items-start">
+                    <div id="lightingVisualPanel" class="flex-1"></div>
+                    <div id="colorPickerPanel" class="w-48 shrink-0"></div>
                 </div>
+                <!-- 灯光控制在下 -->
+                <div id="lightingControlPanel"></div>
             </div>
 
             <!-- 按键映射 Tab -->
@@ -475,7 +515,7 @@ import { DeviceService, DeviceStatus, DeviceType } from './src/services/DeviceSe
             toast.warn('已重置全部设置');
         };
 
-        // ==================== 灯光控制面板 ====================
+        // 灯光控制面板 ====================
         new Panel({
             title: '💡 灯光控制',
             subtitle: '配置 LED 灯效',
@@ -483,22 +523,39 @@ import { DeviceService, DeviceStatus, DeviceType } from './src/services/DeviceSe
                 <div class="space-y-4">
                     <div id="lightEnabledSwitch"></div>
                     <div id="lightModeSelect"></div>
-                    <div id="lightColorInput"></div>
-                    <div id="lightBrightnessSlider"></div>
-                    <div id="lightSpeedSlider"></div>
+                    <div id="lightBrightnessBtns"></div>
+                    <div id="lightSpeedBtns"></div>
                 </div>
             `,
         }).mount('#lightingControlPanel');
 
-        // 灯光可视化
+        // 灯光可视化 - 键盘布局
         new Panel({
             title: '🌈 LED 预览',
-            subtitle: '15 个 LED 灯实时显示',
+            subtitle: '15 个 LED 灯实时显示（键盘布局）',
             content: `
-                <div id="ledPreview" class="grid grid-cols-5 gap-2 p-3 bg-slate-900/50 rounded-lg">
-                    ${Array.from({length: 15}, (_, i) =>
-                        `<div class="led" data-led="${i}" style="background:#06b6d4; color:#06b6d4"></div>`
-                    ).join('')}
+                <div id="ledPreview" class="p-4 bg-slate-900/50 rounded-lg">
+                    <div id="ledKeymapGrid">
+                        <!-- Row 1: Num, -, +, / -->
+                        <div class="led-key" data-led="0" style="background:#06b6d4">Num</div>
+                        <div class="led-key" data-led="1" style="background:#06b6d4">-</div>
+                        <div class="led-key" data-led="2" style="background:#06b6d4">+</div>
+                        <div class="led-key" data-led="3" style="background:#06b6d4">/</div>
+                        <!-- Row 2: 7, 8, 9, 0 -->
+                        <div class="led-key" data-led="4" style="background:#06b6d4">7</div>
+                        <div class="led-key" data-led="5" style="background:#06b6d4">8</div>
+                        <div class="led-key" data-led="6" style="background:#06b6d4">9</div>
+                        <div class="led-key" data-led="7" style="background:#06b6d4">0</div>
+                        <!-- Row 3: 4, 5, 6, Enter (跨2行) -->
+                        <div class="led-key" data-led="8" style="background:#06b6d4">4</div>
+                        <div class="led-key" data-led="9" style="background:#06b6d4">5</div>
+                        <div class="led-key" data-led="10" style="background:#06b6d4">6</div>
+                        <div class="led-key enter-key" data-led="11" style="background:#06b6d4">Enter</div>
+                        <!-- Row 4: 1, 2, 3 -->
+                        <div class="led-key" data-led="12" style="background:#06b6d4">1</div>
+                        <div class="led-key" data-led="13" style="background:#06b6d4">2</div>
+                        <div class="led-key" data-led="14" style="background:#06b6d4">3</div>
+                    </div>
                 </div>
                 <div class="mt-3 flex gap-2">
                     <button id="btnApplyLighting" class="flex-1 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-sm">
@@ -514,10 +571,73 @@ import { DeviceService, DeviceStatus, DeviceType } from './src/services/DeviceSe
             `,
         }).mount('#lightingVisualPanel');
 
+        // 颜色调色盘 - 9个固件预设 + 1个Web自定义
+        const firmwareColors = [
+            '#ff0000', '#ff8000', '#ffff00', '#00ff00', '#00ffff',
+            '#0000ff', '#8000ff', '#ff00ff', '#ffffff'
+        ];
+        let currentColor = '#00ffff';
+        let customColor = '#00ffff';
+        let selectedIndex = 4; // 默认选中第5个(青色)
+
+        // 颜色选择器面板 - 调色板样式
+        new Panel({
+            title: '🎨 颜色选择',
+            subtitle: '选择灯效颜色',
+            content: `
+                <div class="space-y-3">
+                    <div class="flex gap-1.5 flex-wrap">
+                        ${firmwareColors.map((color, i) => `
+                            <button class="color-slot w-8 h-8 rounded border-2 transition-all hover:scale-110 ${i === selectedIndex ? 'border-white shadow-lg' : 'border-slate-700'}"
+                                style="background: ${color}"
+                                data-index="${i}"
+                                data-color="${color}"
+                                data-type="firmware"
+                                title="固件预设 ${i + 1}"></button>
+                        `).join('')}
+                    </div>
+                    <button class="color-slot w-full h-10 rounded border-2 transition-all hover:scale-105 border-slate-700 relative overflow-hidden"
+                        id="customColorBtn"
+                        data-index="9"
+                        data-type="custom"
+                        title="自定义颜色">
+                        <div id="customColorFill" class="w-full h-full" style="background: ${customColor}"></div>
+                        <div class="absolute inset-0 flex items-center justify-center text-xs font-bold text-white/50 pointer-events-none">自定义</div>
+                    </button>
+                    <div id="customColorPanel" class="p-2 bg-slate-800/50 rounded-lg border border-slate-700">
+                        <div class="space-y-2">
+                            <div class="flex items-center gap-2">
+                                <input type="color" id="colorPicker" value="${customColor}" class="w-8 h-8 rounded cursor-pointer border-0 bg-transparent">
+                                <input type="text" id="colorHexInput" value="${customColor}"
+                                    class="flex-1 bg-slate-900/50 border border-slate-700 focus:border-cyan-500/50
+                                           rounded px-2 py-1 text-xs font-mono
+                                           text-slate-200 focus:outline-none"
+                                    placeholder="#000000" maxlength="7">
+                            </div>
+                            <div class="grid grid-cols-6 gap-1" id="colorPalette">
+                                ${[
+                                    '#ff0000', '#ff4000', '#ff8000', '#ffbf00', '#ffff00', '#bfff00',
+                                    '#80ff00', '#40ff00', '#00ff00', '#00ff40', '#00ff80', '#00ffbf',
+                                    '#00ffff', '#00bfff', '#0080ff', '#0040ff', '#0000ff', '#4000ff',
+                                    '#8000ff', '#bf00ff', '#ff00ff', '#ff00bf', '#ff0080', '#ff0040',
+                                    '#ffffff', '#cccccc', '#999999', '#666666', '#333333', '#000000'
+                                ].map(c => `
+                                    <button class="palette-color w-full aspect-square rounded border border-slate-600 hover:scale-125 transition-transform"
+                                        style="background: ${c}"
+                                        data-color="${c}"
+                                        title="${c}"></button>
+                                `).join('')}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `,
+        }).mount('#colorPickerPanel');
+
         // 灯光 UI 组件
         const lightEnabled = new Switch({
             label: '总开关',
-            value: false,
+            value: true,  // 与 LightingService 初始状态保持一致
             onChange: async (v) => {
                 if (!lighting) return;
                 try {
@@ -545,48 +665,193 @@ import { DeviceService, DeviceStatus, DeviceType } from './src/services/DeviceSe
                 { value: 'gradient-flow', label: '渐变流水' },
             ],
             value: 'solid-color',
-            onChange: (v) => lighting && lighting.setMode(v),
+            onChange: (v) => {
+                // 只同步状态，不立即下发
+                if (lighting) lighting.state.mode = v;
+            },
         });
         lightMode.mount('#lightModeSelect');
 
-        const lightColor = new Input({
-            label: '主色调',
-            value: '#06b6d4',
-            prefix: '🎨',
-            onChange: (v) => {
-                if (lighting) lighting.setMainColor(v);
-                updateLedPreview(v);
-            },
-        });
-        lightColor.mount('#lightColorInput');
+        // 颜色槽点击 - 只更新 UI，不发送指令
+        document.querySelectorAll('.color-slot').forEach(btn => {
+            btn.onclick = () => {
+                const type = btn.dataset.type;
+                const index = parseInt(btn.dataset.index);
 
-        const lightBrightness = new Slider({
-            label: '亮度',
-            min: 0, max: 4, value: 4,
-            showValue: true, unit: '档',
-            onChange: (v) => lighting && lighting.setBrightness(v),
-        });
-        lightBrightness.mount('#lightBrightnessSlider');
+                // 更新选中状态
+                document.querySelectorAll('.color-slot').forEach(b => {
+                    b.classList.remove('border-white', 'shadow-lg');
+                    b.classList.add('border-slate-700');
+                });
+                btn.classList.remove('border-slate-700');
+                btn.classList.add('border-white', 'shadow-lg');
+                selectedIndex = index;
 
-        const lightSpeed = new Slider({
-            label: '速度',
-            min: 0, max: 4, value: 2,
-            showValue: true, unit: '档',
-            onChange: (v) => lighting && lighting.setSpeed(v),
+                if (type === 'firmware') {
+                    // 固件预设颜色
+                    currentColor = btn.dataset.color;
+                    document.getElementById('customColorPanel').classList.add('hidden');
+                    updateLedPreview(currentColor);
+                    // 同步到 lighting 服务状态
+                    if (lighting) lighting.state.colorIndex = index;
+                } else {
+                    // 自定义颜色
+                    document.getElementById('customColorPanel').classList.remove('hidden');
+                    updateLedPreview(customColor);
+                    // 同步到 lighting 服务状态
+                    if (lighting) {
+                        lighting.state.colorIndex = 9;
+                        lighting.state.color = customColor;
+                    }
+                }
+            };
         });
-        lightSpeed.mount('#lightSpeedSlider');
+
+        // 调色板颜色点击
+        document.querySelectorAll('.palette-color').forEach(btn => {
+            btn.onclick = () => {
+                customColor = btn.dataset.color;
+                document.getElementById('colorPicker').value = customColor;
+                document.getElementById('colorHexInput').value = customColor;
+                document.getElementById('customColorFill').style.background = customColor;
+                // 切换到自定义颜色
+                selectedIndex = 9;
+                document.querySelectorAll('.color-slot').forEach(b => {
+                    b.classList.remove('border-white', 'shadow-lg');
+                    b.classList.add('border-slate-700');
+                });
+                const customBtn = document.getElementById('customColorBtn');
+                customBtn.classList.remove('border-slate-700');
+                customBtn.classList.add('border-white', 'shadow-lg');
+                updateLedPreview(customColor);
+                if (lighting) {
+                    lighting.state.colorIndex = 9;
+                    lighting.state.color = customColor;
+                }
+            };
+        });
+
+        // 颜色选择器 - 只更新 UI，不发送指令
+        document.getElementById('colorPicker').oninput = (e) => {
+            customColor = e.target.value;
+            document.getElementById('colorHexInput').value = customColor;
+            document.getElementById('customColorFill').style.background = customColor;
+            if (selectedIndex === 9) {
+                updateLedPreview(customColor);
+                if (lighting) {
+                    lighting.state.colorIndex = 9;
+                    lighting.state.color = customColor;
+                }
+            }
+        };
+
+        // HEX 输入 - 只更新 UI，不发送指令
+        document.getElementById('colorHexInput').oninput = (e) => {
+            let value = e.target.value.trim();
+            if (!value.startsWith('#')) value = '#' + value;
+            if (/^#[0-9A-Fa-f]{6}$/.test(value)) {
+                customColor = value;
+                document.getElementById('colorPicker').value = value;
+                document.getElementById('customColorFill').style.background = value;
+                if (selectedIndex === 9) {
+                    updateLedPreview(value);
+                    if (lighting) {
+                        lighting.state.colorIndex = 9;
+                        lighting.state.color = value;
+                    }
+                }
+            }
+        };
+
+        // 亮度按钮组
+        let currentBrightness = 4;
+        const brightnessLabels = ['关', '低', '中', '高', '最高'];
+        document.getElementById('lightBrightnessBtns').innerHTML = `
+            <div class="space-y-2">
+                <label class="text-sm font-medium text-slate-300">亮度</label>
+                <div class="flex gap-2">
+                    ${Array.from({length: 5}, (_, i) => `
+                        <button class="brightness-btn flex-1 py-2 rounded-lg text-sm transition-colors ${i === currentBrightness ? 'bg-cyan-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}" data-value="${i}">
+                            ${brightnessLabels[i]}
+                        </button>
+                    `).join('')}
+                </div>
+            </div>
+        `;
+        document.querySelectorAll('.brightness-btn').forEach(btn => {
+            btn.onclick = () => {
+                const value = parseInt(btn.dataset.value);
+                currentBrightness = value;
+                document.querySelectorAll('.brightness-btn').forEach(b => {
+                    b.classList.remove('bg-cyan-600', 'text-white');
+                    b.classList.add('bg-slate-800', 'text-slate-400');
+                });
+                btn.classList.remove('bg-slate-800', 'text-slate-400');
+                btn.classList.add('bg-cyan-600', 'text-white');
+                // 同步状态到 lighting 服务，但不立即下发
+                if (lighting) lighting.state.brightness = value;
+            };
+        });
+
+        // 速度按钮组
+        let currentSpeed = 2;
+        const speedLabels = ['最慢', '慢', '中', '快', '最快'];
+        document.getElementById('lightSpeedBtns').innerHTML = `
+            <div class="space-y-2">
+                <label class="text-sm font-medium text-slate-300">速度</label>
+                <div class="flex gap-2">
+                    ${Array.from({length: 5}, (_, i) => `
+                        <button class="speed-btn flex-1 py-2 rounded-lg text-sm transition-colors ${i === currentSpeed ? 'bg-cyan-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}" data-value="${i}">
+                            ${speedLabels[i]}
+                        </button>
+                    `).join('')}
+                </div>
+            </div>
+        `;
+        document.querySelectorAll('.speed-btn').forEach(btn => {
+            btn.onclick = () => {
+                const value = parseInt(btn.dataset.value);
+                currentSpeed = value;
+                document.querySelectorAll('.speed-btn').forEach(b => {
+                    b.classList.remove('bg-cyan-600', 'text-white');
+                    b.classList.add('bg-slate-800', 'text-slate-400');
+                });
+                btn.classList.remove('bg-slate-800', 'text-slate-400');
+                btn.classList.add('bg-cyan-600', 'text-white');
+                // 同步状态到 lighting 服务，但不立即下发
+                if (lighting) lighting.state.speed = value;
+            };
+        });
 
         function updateLedPreview(color) {
-            document.querySelectorAll('[data-led]').forEach(led => {
-                led.style.background = color;
-                led.style.color = color;
-                led.classList.add('on');
+            // 更新 .led-key 的背景色和文字颜色
+            document.querySelectorAll('.led-key[data-led]').forEach(key => {
+                key.style.background = color;
+                // 根据背景色亮度自动调整文字颜色
+                const rgb = hexToRgb(color);
+                if (rgb) {
+                    const brightness = (rgb.r * 299 + rgb.g * 587 + rgb.b * 114) / 1000;
+                    key.style.color = brightness > 128 ? '#000000' : '#ffffff';
+                }
             });
+        }
+
+        function hexToRgb(hex) {
+            const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+            return result ? {
+                r: parseInt(result[1], 16),
+                g: parseInt(result[2], 16),
+                b: parseInt(result[3], 16)
+            } : null;
         }
 
         document.getElementById('btnApplyLighting').onclick = async () => {
             if (!lighting) return toast.warn('请先连接设备');
             try {
+                // 先启用灯光再应用
+                if (!lighting.state.enabled) {
+                    lighting.state.enabled = true;
+                }
                 await lighting.applyState();
                 toast.success('灯光已应用');
             } catch (err) {

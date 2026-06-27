@@ -78,7 +78,7 @@ export class Select extends Component {
                     </svg>
                 </button>
                 ${this.isOpen ? `
-                    <div class="absolute z-30 w-full mt-1 bg-slate-800 border border-slate-700 rounded-lg shadow-2xl max-h-60 overflow-y-auto">
+                    <div class="absolute z-30 w-max min-w-full mt-1 bg-slate-800 border border-slate-700 rounded-lg shadow-2xl max-h-60 overflow-y-auto">
                         ${this.props.searchable ? `
                             <div class="p-2 border-b border-slate-700">
                                 <input
