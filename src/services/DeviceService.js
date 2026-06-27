@@ -499,13 +499,14 @@ export class DeviceService {
         })))}`);
 
         if (!device.collections || device.collections.length === 0) {
-            // 如果没有 collections 信息，默认认为是键盘（兼容旧设备）
-            logger.warn('无 collections 信息，默认认为是键盘接口');
-            return true;
+            // 如果没有 collections 信息，无法判断，返回 false
+            logger.warn('无 collections 信息，无法判断接口类型');
+            return false;
         }
 
         let isKeyboard = false;
         let isMouse = false;
+        let hasOutput = false;
 
         for (const collection of device.collections) {
             // 键盘: usagePage=0x01, usage=0x06
@@ -516,17 +517,35 @@ export class DeviceService {
             if (collection.usagePage === 0x01 && collection.usage === 0x02) {
                 isMouse = true;
             }
+            // 有 outputReports 说明有 OUT 端点
+            if (collection.outputReports && collection.outputReports.length > 0) {
+                hasOutput = true;
+            }
         }
 
-        logger.info(`  isKeyboard=${isKeyboard}, isMouse=${isMouse}`);
+        logger.info(`  isKeyboard=${isKeyboard}, isMouse=${isMouse}, hasOutput=${hasOutput}`);
 
-        // 如果是鼠标接口，返回 false
+        // 明确的鼠标接口，返回 false
         if (isMouse && !isKeyboard) {
+            logger.warn('检测到鼠标接口 (usagePage=0x01, usage=0x02)');
             return false;
         }
 
-        // 其他情况（键盘或未知）都认为是键盘接口
-        return true;
+        // 明确的键盘接口，返回 true
+        if (isKeyboard) {
+            logger.info('检测到键盘接口 (usagePage=0x01, usage=0x06)');
+            return true;
+        }
+
+        // 有 OUT 端点，可能是键盘接口
+        if (hasOutput) {
+            logger.info('检测到有 OUT 端点的设备，认为是键盘接口');
+            return true;
+        }
+
+        // 无法判断，返回 false
+        logger.warn('无法判断接口类型，默认认为不是键盘接口');
+        return false;
     }
 
     /**
